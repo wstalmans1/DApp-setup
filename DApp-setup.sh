@@ -12,6 +12,7 @@ set -euo pipefail
 #    OR
 #      chmod +x DApp-setup.sh && ./DApp-setup.sh
 # 4) After it finishes (no new subfolder is created):
+#      pnpm contracts:compile
 #      pnpm web:dev
 #
 # Required parameters (edit apps/dao-dapp/.env.local after script runs):
@@ -27,6 +28,11 @@ set -euo pipefail
 #     Example: https://arbitrum.publicnode.com
 # - VITE_SEPOLIA_RPC: HTTPS RPC URL for Sepolia testnet
 #     Example: https://rpc.sepolia.org or your Infura/Alchemy HTTP URL
+#
+# Additional contract deployment parameters (edit packages/contracts/.env.hardhat.local):
+# - PRIVATE_KEY or MNEMONIC: Credentials for contract deployment
+# - MAINNET_RPC / POLYGON_RPC / OPTIMISM_RPC / ARBITRUM_RPC / SEPOLIA_RPC
+# - ETHERSCAN / POLYGONSCAN / OPTIMISM_ETHERSCAN / ARBITRUM_ETHERSCAN API keys (optional, for verification)
 #
 # Notes:
 # - Only HTTP endpoints are configured (no WebSockets) to avoid WS errors.
@@ -58,6 +64,12 @@ node_modules
 dist
 .env
 .env.*
+packages/contracts/cache
+packages/contracts/artifacts
+packages/contracts/typechain-types
+packages/contracts/.env.hardhat.local
+apps/dao-dapp/src/contracts/*
+!apps/dao-dapp/src/contracts/.gitkeep
 EOF
 
 cat > package.json <<'EOF'
@@ -68,7 +80,11 @@ cat > package.json <<'EOF'
   "scripts": {
     "web:dev": "pnpm -C apps/dao-dapp dev",
     "web:build": "pnpm -C apps/dao-dapp build",
-    "web:preview": "pnpm -C apps/dao-dapp preview"
+    "web:preview": "pnpm -C apps/dao-dapp preview",
+    "contracts:compile": "pnpm -C packages/contracts hardhat compile",
+    "contracts:test": "pnpm -C packages/contracts hardhat test",
+    "contracts:deploy": "pnpm -C packages/contracts hardhat run scripts/deploy.ts",
+    "contracts:verify": "pnpm -C packages/contracts hardhat verify"
   }
 }
 EOF
@@ -76,6 +92,7 @@ EOF
 cat > pnpm-workspace.yaml <<'EOF'
 packages:
   - "apps/*"
+  - "packages/*"
 EOF
 
 # App scaffold (idempotent)
@@ -99,6 +116,12 @@ EOF
 # Tailwind entry (v4 style)
 cat > apps/dao-dapp/src/index.css <<'EOF'
 @import 'tailwindcss';
+EOF
+
+# Shared contracts artifacts folder for the web app
+mkdir -p apps/dao-dapp/src/contracts
+cat > apps/dao-dapp/src/contracts/.gitkeep <<'EOF'
+# Generated contract artifacts are ignored by git but kept for tooling.
 EOF
 
 # Minimal RainbowKit/Wagmi config (HTTP only)
@@ -178,14 +201,177 @@ VITE_SEPOLIA_RPC=https://rpc.sepolia.org
 EOF
 cp apps/dao-dapp/.env.example apps/dao-dapp/.env.local
 
+# Contracts workspace (Hardhat + TypeScript)
+mkdir -p packages/contracts
+cat > packages/contracts/package.json <<'EOF'
+{
+  "name": "contracts",
+  "private": true,
+  "scripts": {
+    "clean": "hardhat clean",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.ts"
+  }
+}
+EOF
+
+cat > packages/contracts/tsconfig.json <<'EOF'
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "outDir": "dist",
+    "types": ["node", "hardhat"]
+  },
+  "include": ["hardhat.config.ts", "scripts", "test", "typechain-types"],
+  "exclude": ["dist"]
+}
+EOF
+
+cat > packages/contracts/hardhat.config.ts <<'EOF'
+import { resolve } from 'path'
+import { config as loadEnv } from 'dotenv'
+import { HardhatUserConfig } from 'hardhat/config'
+import { NetworkUserConfig } from 'hardhat/types'
+import '@nomicfoundation/hardhat-toolbox'
+
+loadEnv({ path: resolve(__dirname, '.env.hardhat.local') })
+
+const privateKey = process.env.PRIVATE_KEY?.trim()
+const mnemonic = process.env.MNEMONIC?.trim()
+
+const accounts = (() => {
+  if (privateKey) {
+    return [privateKey]
+  }
+  if (mnemonic) {
+    return { mnemonic }
+  }
+  return undefined
+})()
+
+const networks: Record<string, NetworkUserConfig> = {
+  hardhat: {}
+}
+
+const addNetwork = (name: string, rpcUrl?: string) => {
+  const url = rpcUrl?.trim()
+  if (!url) return
+  networks[name] = {
+    url,
+    ...(accounts ? { accounts } : {})
+  }
+}
+
+addNetwork('mainnet', process.env.MAINNET_RPC)
+addNetwork('polygon', process.env.POLYGON_RPC)
+addNetwork('optimism', process.env.OPTIMISM_RPC)
+addNetwork('arbitrumOne', process.env.ARBITRUM_RPC)
+addNetwork('sepolia', process.env.SEPOLIA_RPC)
+
+const etherscanApiKey: Record<string, string> = {}
+
+if (process.env.ETHERSCAN_API_KEY?.trim()) {
+  const key = process.env.ETHERSCAN_API_KEY.trim()
+  etherscanApiKey.mainnet = key
+  etherscanApiKey.sepolia = key
+}
+if (process.env.POLYGONSCAN_API_KEY?.trim()) {
+  etherscanApiKey.polygon = process.env.POLYGONSCAN_API_KEY.trim()
+}
+if (process.env.OPTIMISM_ETHERSCAN_API_KEY?.trim()) {
+  etherscanApiKey.optimisticEthereum = process.env.OPTIMISM_ETHERSCAN_API_KEY.trim()
+}
+if (process.env.ARBITRUM_ETHERSCAN_API_KEY?.trim()) {
+  etherscanApiKey.arbitrumOne = process.env.ARBITRUM_ETHERSCAN_API_KEY.trim()
+}
+
+const config: HardhatUserConfig = {
+  solidity: {
+    version: '0.8.24',
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200
+      }
+    }
+  },
+  defaultNetwork: 'hardhat',
+  networks,
+  etherscan: {
+    apiKey: etherscanApiKey
+  },
+  paths: {
+    root: resolve(__dirname),
+    sources: resolve(__dirname, 'contracts'),
+    tests: resolve(__dirname, 'test'),
+    cache: resolve(__dirname, 'cache'),
+    artifacts: resolve(__dirname, '../../apps/dao-dapp/src/contracts')
+  }
+}
+
+export default config
+EOF
+
+mkdir -p packages/contracts/contracts
+cat > packages/contracts/contracts/.gitkeep <<'EOF'
+# Add your Solidity contracts here.
+EOF
+
+mkdir -p packages/contracts/scripts
+cat > packages/contracts/scripts/deploy.ts <<'EOF'
+async function main() {
+  console.log('Implement deployments in packages/contracts/scripts/deploy.ts before running this command.')
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exitCode = 1
+})
+EOF
+
+mkdir -p packages/contracts/test
+cat > packages/contracts/test/.gitkeep <<'EOF'
+# Add your Hardhat tests here.
+EOF
+
+cat > packages/contracts/.env.hardhat.example <<'EOF'
+# Private key or mnemonic for deployments (set one of the two)
+PRIVATE_KEY=
+MNEMONIC=
+
+# RPC endpoints (HTTPS)
+MAINNET_RPC=
+POLYGON_RPC=
+OPTIMISM_RPC=
+ARBITRUM_RPC=
+SEPOLIA_RPC=
+
+# Block explorer API keys
+ETHERSCAN_API_KEY=
+POLYGONSCAN_API_KEY=
+OPTIMISM_ETHERSCAN_API_KEY=
+ARBITRUM_ETHERSCAN_API_KEY=
+EOF
+cp packages/contracts/.env.hardhat.example packages/contracts/.env.hardhat.local
+
+pnpm -C packages/contracts add -D hardhat @nomicfoundation/hardhat-toolbox typescript ts-node @types/node dotenv
+
 # Git init (optional)
 if command -v git >/dev/null 2>&1; then
   git init
   git add -A
-  git commit -m "chore: bootstrap monorepo and apps/dao-dapp with RainbowKit/Wagmi + Tailwind v4"
+  git commit -m "chore: bootstrap web app and contracts workspace"
 fi
 
 echo
 echo "Done. Next steps:"
 echo "1) Edit apps/dao-dapp/.env.local (set VITE_WALLETCONNECT_ID and RPC URLs)"
-echo "2) pnpm web:dev"
+echo "2) Edit packages/contracts/.env.hardhat.local (set deployer key, RPC URLs, explorer keys)"
+echo "3) pnpm contracts:compile"
+echo "4) pnpm web:dev"

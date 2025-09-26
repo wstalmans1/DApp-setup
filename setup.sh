@@ -2,16 +2,15 @@
 set -euo pipefail
 
 # -----------------------------------------------------------------------------
-# setup.sh — Full rookie-proof DApp bootstrap
-# - Frontend: Vite + React18 + TS + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v4
-# - Contracts: Hardhat v3 (ESM) + toolbox-viem + OpenZeppelin + TypeChain
-#              + hardhat-deploy + hardhat-gas-reporter + hardhat-contract-sizer (+ docgen installed, off by default)
-# - Foundry (Forge/Anvil) with auto-stop of anvil to avoid hangs
-# - Solhint + Prettier (solidity plugin) + Husky pre-commit
-# - GitHub Actions CI + README
+# setup.sh — Node 22 + React 18 + wagmi/RainbowKit + Tailwind v4 + Hardhat 3 (ESM)
+#           + OpenZeppelin + Foundry (Forge/Anvil) + TypeChain + HH plugins
+#           + Solhint/Prettier + Husky + CI-ready DX
+#
+# Rookie-proof: will AUTO-STOP any running `anvil` before Foundry updates, so it won't hang.
+# Non-interactive Vite scaffold (no prompts).
 # -----------------------------------------------------------------------------
 
-# ----- helpers ----------------------------------------------------------------
+# --- Helpers -----------------------------------------------------------------
 info () { printf "\033[1;34m[i]\033[0m %s\n" "$*"; }
 ok   () { printf "\033[1;32m[✓]\033[0m %s\n" "$*"; }
 warn () { printf "\033[1;33m[!]\033[0m %s\n" "$*"; }
@@ -19,24 +18,29 @@ err  () { printf "\033[1;31m[x]\033[0m %s\n" "$*"; }
 
 stop_anvil() {
   if pgrep -f '^anvil( |$)' >/dev/null 2>&1; then
-    warn "Detected running anvil; stopping…"
+    warn "Detected running anvil; stopping..."
     pkill -f '^anvil( |$)' || true
     sleep 1
     if pgrep -f '^anvil( |$)' >/dev/null 2>&1; then
-      err "anvil still running; close it and re-run."
+      err "anvil still running, please close it manually."
       exit 1
     fi
   fi
 }
 
-# ----- corepack/pnpm ----------------------------------------------------------
-command -v corepack >/dev/null 2>&1 || { err "Corepack not found. Install Node 22+."; exit 1; }
+# --- Corepack & pnpm ---------------------------------------------------------
+command -v corepack >/dev/null 2>&1 || {
+  err "Corepack not found. Install Node.js >= 22 and retry."
+  exit 1
+}
 corepack enable
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 corepack prepare pnpm@10.16.1 --activate
-printf "v22\n" > .nvmrc
 
-# ----- root files -------------------------------------------------------------
+printf "v22\n" > .nvmrc
+pnpm config set ignore-workspace-root-check true
+
+# --- Root files --------------------------------------------------------------
 mkdir -p .github/workflows
 
 cat > .gitignore <<'EOF'
@@ -83,15 +87,15 @@ packages:
   - "packages/*"
 EOF
 
-# ----- app scaffold (non-interactive Vite React+TS) ---------------------------
+# --- App scaffold (Vite + React + TS) ----------------------------------------
 mkdir -p apps
 if [ -d "apps/dao-dapp" ]; then
-  info "apps/dao-dapp exists; skipping scaffold."
+  info "apps/dao-dapp already exists; skipping scaffold."
 else
   pnpm dlx create-vite@6 apps/dao-dapp --template react-ts --no-git --package-manager pnpm
 fi
 
-# React 18 (wagmi peers are <=18)
+# Force React 18 (wagmi peer dep)
 pnpm --dir apps/dao-dapp add react@18.3.1 react-dom@18.3.1
 pnpm --dir apps/dao-dapp add -D @types/react@18.3.12 @types/react-dom@18.3.1
 
@@ -99,7 +103,7 @@ pnpm --dir apps/dao-dapp add -D @types/react@18.3.12 @types/react-dom@18.3.1
 pnpm --dir apps/dao-dapp add @rainbow-me/rainbowkit@~2.2.8 wagmi@~2.16.9 viem@~2.37.6 @tanstack/react-query@~5.90.2
 pnpm --dir apps/dao-dapp add @tanstack/react-query-devtools@~5.90.2 zod@~3.22.0
 
-# Tailwind v4
+# Tailwind
 pnpm --dir apps/dao-dapp add -D tailwindcss@~4.0.0 @tailwindcss/postcss@~4.0.0 postcss@~8.4.47
 cat > apps/dao-dapp/postcss.config.mjs <<'EOF'
 export default { plugins: { '@tailwindcss/postcss': {} } }
@@ -107,10 +111,11 @@ EOF
 mkdir -p apps/dao-dapp/src
 echo '@import "tailwindcss";' > apps/dao-dapp/src/index.css
 
-# frontend plumbing
+# Artifacts dir
 mkdir -p apps/dao-dapp/src/contracts
 echo "# artifacts" > apps/dao-dapp/src/contracts/.gitkeep
 
+# Wagmi config
 mkdir -p apps/dao-dapp/src/config
 cat > apps/dao-dapp/src/config/wagmi.ts <<'EOF'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
@@ -132,6 +137,7 @@ export const config = getDefaultConfig({
 })
 EOF
 
+# main.tsx
 cat > apps/dao-dapp/src/main.tsx <<'EOF'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
@@ -161,6 +167,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 )
 EOF
 
+# Minimal App
 cat > apps/dao-dapp/src/App.tsx <<'EOF'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 
@@ -176,6 +183,7 @@ export default function App() {
 }
 EOF
 
+# Env example
 cat > apps/dao-dapp/.env.example <<'EOF'
 VITE_WALLETCONNECT_ID=
 VITE_MAINNET_RPC=https://cloudflare-eth.com
@@ -188,9 +196,10 @@ cp -f apps/dao-dapp/.env.example apps/dao-dapp/.env.local
 
 pnpm --dir apps/dao-dapp install
 
-# ----- contracts workspace ----------------------------------------------------
+# --- Contracts workspace (Hardhat 3 + plugins) ------------------------------------
 mkdir -p packages/contracts
 
+# contracts/package.json — ESM
 cat > packages/contracts/package.json <<'EOF'
 {
   "name": "contracts",
@@ -200,13 +209,12 @@ cat > packages/contracts/package.json <<'EOF'
     "clean": "hardhat clean",
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "deploy": "hardhat deploy",
-    "deploy:tags": "hardhat deploy --tags all",
-    "verify": "hardhat etherscan-verify"
+    "deploy": "hardhat run scripts/deploy.ts"
   }
 }
 EOF
 
+# tsconfig — NodeNext/ESM
 cat > packages/contracts/tsconfig.json <<'EOF'
 {
   "compilerOptions": {
@@ -224,6 +232,7 @@ cat > packages/contracts/tsconfig.json <<'EOF'
 }
 EOF
 
+# hardhat.config.ts — toolbox-viem + TypeChain + plugins + HH3 networks
 cat > packages/contracts/hardhat.config.ts <<'EOF'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
@@ -266,18 +275,11 @@ const config: HardhatUserConfig = {
   defaultNetwork: 'hardhat',
   networks,
   verify: { etherscan: { apiKey: process.env.ETHERSCAN_API_KEY || '' } },
+  // hardhat-deploy named account
   namedAccounts: { deployer: { default: 0 } },
-  gasReporter: {
-    enabled: true,
-    currency: 'USD',
-    coinmarketcap: process.env.CMC_API_KEY || undefined
-  },
-  contractSizer: {
-    runOnCompile: true,
-    alphaSort: true,
-    disambiguatePaths: false
-  },
-  // docgen: { outputDir: './docs', pages: 'items', collapseNewlines: true },
+  // reporters
+  gasReporter: { enabled: true, currency: 'USD' },
+  contractSizer: { runOnCompile: true },
   paths: {
     root: resolve(__dirname),
     sources: resolve(__dirname, 'contracts'),
@@ -289,11 +291,25 @@ const config: HardhatUserConfig = {
 export default config
 EOF
 
-# dirs & placeholders
-mkdir -p packages/contracts/contracts packages/contracts/deploy packages/contracts/scripts packages/contracts/test
-echo "# contracts" > packages/contracts/contracts/.gitkeep
+# Contracts dirs and placeholders
+mkdir -p packages/contracts/contracts
+echo "// Add your Solidity contracts here." > packages/contracts/contracts/.gitkeep
+
+mkdir -p packages/contracts/scripts
+cat > packages/contracts/scripts/deploy.ts <<'EOF'
+async function main() {
+  console.log('Use hardhat-deploy in /deploy or implement custom deploy logic here.')
+}
+main().catch((error) => {
+  console.error(error)
+  process.exitCode = 1
+})
+EOF
+
+mkdir -p packages/contracts/deploy
 cat > packages/contracts/deploy/00_sample.ts <<'EOF'
 import type { DeployFunction } from 'hardhat-deploy/types'
+
 const func: DeployFunction = async ({ deployments, getNamedAccounts }) => {
   const { deploy } = deployments
   const { deployer } = await getNamedAccounts()
@@ -303,49 +319,52 @@ const func: DeployFunction = async ({ deployments, getNamedAccounts }) => {
 export default func
 func.tags = ['all']
 EOF
-cat > packages/contracts/scripts/deploy.ts <<'EOF'
-async function main() {
-  console.log('Use hardhat-deploy scripts in /deploy, or implement custom logic here.')
-}
-main().catch((e) => { console.error(e); process.exitCode = 1 })
-EOF
-echo "# tests" > packages/contracts/test/.gitkeep
 
-# env
+mkdir -p packages/contracts/test
+echo "// Add your Hardhat tests here." > packages/contracts/test/.gitkeep
+
+# .env examples
 cat > packages/contracts/.env.hardhat.example <<'EOF'
+# Private key or mnemonic for deployments (set one of the two)
 PRIVATE_KEY=
 MNEMONIC=
 
+# RPC endpoints (HTTPS)
 MAINNET_RPC=
 POLYGON_RPC=
 OPTIMISM_RPC=
 ARBITRUM_RPC=
 SEPOLIA_RPC=
 
+# Block explorer API key (Etherscan family)
 ETHERSCAN_API_KEY=
+
+# CoinMarketCap API key (optional, for gas-reporter USD estimates)
 CMC_API_KEY=
 EOF
 cp -f packages/contracts/.env.hardhat.example packages/contracts/.env.hardhat.local
 
-# dev deps & plugins
+# Dev deps for contracts (HH3 + toolbox-viem + TS + plugins + typechain)
 pnpm --dir packages/contracts add -D hardhat@^3 @nomicfoundation/hardhat-toolbox-viem@^5.0.0 typescript@~5.9.2 ts-node@~10.9.2 @types/node@^22 dotenv@^16
-pnpm --dir packages/contracts add -D @typechain/hardhat typechain @typechain/ethers-v6
+pnpm --dir packages/contracts add -D typechain @typechain/ethers-v6 @typechain/hardhat
 pnpm --dir packages/contracts add -D hardhat-deploy hardhat-gas-reporter hardhat-contract-sizer
+# Docgen installed but disabled in config by default (uncomment import+block to enable)
 pnpm --dir packages/contracts add -D hardhat-docgen
-# runtime deps
+# OpenZeppelin (runtime)
 pnpm --dir packages/contracts add @openzeppelin/contracts @openzeppelin/contracts-upgradeable
 
+# Install workspace deps (root lockfile)
 pnpm install
 
-# ----- Foundry (Forge/Anvil) -------------------------------------------------
+# --- Foundry (Forge/Anvil) ---------------------------------------------------
 stop_anvil
 if [ ! -x "$HOME/.foundry/bin/forge" ]; then
-  info "Installing Foundry…"
+  info "Installing Foundry..."
   curl -L https://foundry.paradigm.xyz | bash
 fi
-"$HOME/.foundry/bin/foundryup" || warn "foundryup failed; rerun later with: pnpm foundry:update"
+"$HOME/.foundry/bin/foundryup" || warn "foundryup failed; run manually with pnpm foundry:update"
 
-# foundry.toml + sample test
+# foundry.toml and sample test
 cat > packages/contracts/foundry.toml <<'EOF'
 [profile.default]
 src = "contracts"
@@ -366,6 +385,7 @@ runs = 64
 depth = 64
 fail_on_revert = true
 EOF
+
 mkdir -p packages/contracts/forge-test
 cat > packages/contracts/forge-test/Sample.t.sol <<'EOF'
 // SPDX-License-Identifier: MIT
@@ -377,7 +397,7 @@ contract SampleTest is Test {
 EOF
 
 # ----- lint/format & Husky ---------------------------------------------------
-pnpm add -D eslint prettier
+pnpm -w add -D eslint prettier husky lint-staged
 pnpm --dir packages/contracts add -D solhint prettier prettier-plugin-solidity
 
 cat > apps/dao-dapp/.eslintrc.json <<'EOF'
@@ -411,14 +431,7 @@ cat > packages/contracts/.solhint.json <<'EOF'
 }
 EOF
 
-pnpm add -D husky lint-staged
 pnpm dlx husky init
-cat > .lintstagedrc.json <<'EOF'
-{
-  "*.{ts,tsx,js}": ["eslint --fix", "prettier --write"],
-  "packages/contracts/**/*.sol": ["prettier --write", "solhint --fix"]
-}
-EOF
 mkdir -p .husky
 cat > .husky/pre-commit <<'EOF'
 #!/usr/bin/env sh
@@ -556,14 +569,15 @@ Artifacts (ABIs) appear in `apps/dao-dapp/src/contracts/`.
 
 * TS: ESLint + Prettier
 * Solidity: Solhint + Prettier (solidity plugin)
-  Husky runs fixes on commit; CI runs tests & lint.
+
+Husky runs fixes on commit; CI runs tests & lint.
 
 ## 5) Docs (optional)
 
 Enable `hardhat-docgen` by uncommenting the import and `docgen` block in `hardhat.config.ts`.
 EOF
 
-# ----- git init (optional) ---------------------------------------------------
+# ----- Git init (optional) ---------------------------------------------------
 
 if command -v git >/dev/null 2>&1; then
 git init

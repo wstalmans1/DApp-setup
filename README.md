@@ -52,7 +52,8 @@ pnpm web:preview   # preview the build
 **Local chain**
 
 ```bash
-pnpm anvil         # start local EVM at http://127.0.0.1:8545
+pnpm anvil:start   # start local EVM at http://127.0.0.1:8545
+pnpm anvil:stop    # stop anvil
 ```
 
 **Contracts (Hardhat)**
@@ -69,6 +70,7 @@ pnpm contracts:verify 0xYourContractAddress
 ```bash
 pnpm forge:test    # very fast tests + fuzzing
 pnpm forge:fmt     # format Solidity
+pnpm foundry:update # update Foundry tools
 ```
 
 Husky will auto-run formatting/lint for TS/Solidity on each commit.
@@ -134,7 +136,7 @@ import { readContract } from 'wagmi/actions'
 
 * **Gas**: `hardhat-gas-reporter` prints gas & USD estimates on test runs.
 * **Size**: `hardhat-contract-sizer` reports bytecode size on compile (helps avoid 24KB limit).
-* **Docs**: `hardhat-docgen` outputs Markdown docs to `packages/contracts/docs/` on compile.
+* **Docs**: `hardhat-docgen` is installed but disabled by default. Enable by uncommenting the import and config block in `hardhat.config.ts`.
 
 ---
 

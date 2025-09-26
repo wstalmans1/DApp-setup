@@ -2,12 +2,15 @@
 set -euo pipefail
 
 # -----------------------------------------------------------------------------
-# setup.sh — Node 22 + React 18 + wagmi/RainbowKit + Tailwind v4 + Hardhat 3 (ESM)
-#           + OpenZeppelin + Foundry (Forge/Anvil) + TypeChain + HH plugins
-#           + Solhint/Prettier + Husky + CI-ready DX
-#
-# Rookie-proof: will AUTO-STOP any running `anvil` before Foundry updates, so it won't hang.
-# Non-interactive Vite scaffold (no prompts).
+# setup.sh — Rookie-proof DApp bootstrap (Hardhat **v2** lane)
+# Frontend: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v4
+# Contracts: Hardhat v2 + @nomicfoundation/hardhat-toolbox (ethers v6) + TypeChain
+#            + hardhat-deploy + gas-reporter + contract-sizer + docgen + OpenZeppelin
+# DX: Foundry (Forge/Anvil), ESLint/Prettier/Solhint, Husky + lint-staged, CI
+# Notes:
+# - Non-interactive Vite scaffold (no prompts)
+# - Auto-stops any running `anvil` before Foundry updates
+# - Places ABIs/artifacts into apps/dao-dapp/src/contracts for the frontend
 # -----------------------------------------------------------------------------
 
 # --- Helpers -----------------------------------------------------------------
@@ -18,25 +21,21 @@ err  () { printf "\033[1;31m[x]\033[0m %s\n" "$*"; }
 
 stop_anvil() {
   if pgrep -f '^anvil( |$)' >/dev/null 2>&1; then
-    warn "Detected running anvil; stopping..."
+    warn "Detected running anvil; stopping…"
     pkill -f '^anvil( |$)' || true
     sleep 1
     if pgrep -f '^anvil( |$)' >/dev/null 2>&1; then
-      err "anvil still running, please close it manually."
+      err "anvil still running; close it and re-run."
       exit 1
     fi
   fi
 }
 
 # --- Corepack & pnpm ---------------------------------------------------------
-command -v corepack >/dev/null 2>&1 || {
-  err "Corepack not found. Install Node.js >= 22 and retry."
-  exit 1
-}
+command -v corepack >/dev/null 2>&1 || { err "Corepack not found. Install Node.js >= 22 and retry."; exit 1; }
 corepack enable
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 corepack prepare pnpm@10.16.1 --activate
-
 printf "v22\n" > .nvmrc
 pnpm config set ignore-workspace-root-check true
 
@@ -70,7 +69,7 @@ cat > package.json <<'EOF'
     "contracts:compile": "pnpm --filter contracts run compile",
     "contracts:test": "pnpm --filter contracts run test",
     "contracts:deploy": "pnpm --filter contracts run deploy",
-    "contracts:verify": "pnpm --filter contracts exec hardhat verify",
+    "contracts:verify": "pnpm --filter contracts exec hardhat etherscan-verify",
 
     "anvil:start": "anvil --block-time 1",
     "anvil:stop": "pkill -f '^anvil( |$)' || true",
@@ -95,7 +94,7 @@ else
   pnpm dlx create-vite@6 apps/dao-dapp --template react-ts --no-git --package-manager pnpm
 fi
 
-# Force React 18 (wagmi peer dep)
+# Force React 18 (wagmi peer dep limit)
 pnpm --dir apps/dao-dapp add react@18.3.1 react-dom@18.3.1
 pnpm --dir apps/dao-dapp add -D @types/react@18.3.12 @types/react-dom@18.3.1
 
@@ -103,7 +102,7 @@ pnpm --dir apps/dao-dapp add -D @types/react@18.3.12 @types/react-dom@18.3.1
 pnpm --dir apps/dao-dapp add @rainbow-me/rainbowkit@~2.2.8 wagmi@~2.16.9 viem@~2.37.6 @tanstack/react-query@~5.90.2
 pnpm --dir apps/dao-dapp add @tanstack/react-query-devtools@~5.90.2 zod@~3.22.0
 
-# Tailwind
+# Tailwind v4
 pnpm --dir apps/dao-dapp add -D tailwindcss@~4.0.0 @tailwindcss/postcss@~4.0.0 postcss@~8.4.47
 cat > apps/dao-dapp/postcss.config.mjs <<'EOF'
 export default { plugins: { '@tailwindcss/postcss': {} } }
@@ -111,11 +110,11 @@ EOF
 mkdir -p apps/dao-dapp/src
 echo '@import "tailwindcss";' > apps/dao-dapp/src/index.css
 
-# Artifacts dir
+# Artifacts dir for frontend
 mkdir -p apps/dao-dapp/src/contracts
-echo "# artifacts" > apps/dao-dapp/src/contracts/.gitkeep
+echo "# Generated contract artifacts" > apps/dao-dapp/src/contracts/.gitkeep
 
-# Wagmi config
+# Wagmi/RainbowKit config
 mkdir -p apps/dao-dapp/src/config
 cat > apps/dao-dapp/src/config/wagmi.ts <<'EOF'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
@@ -196,117 +195,92 @@ cp -f apps/dao-dapp/.env.example apps/dao-dapp/.env.local
 
 pnpm --dir apps/dao-dapp install
 
-# --- Contracts workspace (Hardhat 3 + plugins) ------------------------------------
+# --- Contracts workspace (Hardhat v2 + plugins) ------------------------------
 mkdir -p packages/contracts
 
-# contracts/package.json — ESM
+# contracts/package.json
 cat > packages/contracts/package.json <<'EOF'
 {
   "name": "contracts",
   "private": true,
-  "type": "module",
   "scripts": {
     "clean": "hardhat clean",
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "deploy": "hardhat run scripts/deploy.ts"
+    "deploy": "hardhat deploy",
+    "deploy:tags": "hardhat deploy --tags all",
+    "etherscan-verify": "hardhat etherscan-verify"
   }
 }
 EOF
 
-# tsconfig — NodeNext/ESM
+# tsconfig (CJS/Node16-style works smoothly with HH2 toolchain)
 cat > packages/contracts/tsconfig.json <<'EOF'
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
+    "module": "Node16",
     "strict": true,
     "esModuleInterop": true,
-    "moduleResolution": "NodeNext",
+    "moduleResolution": "Node16",
     "resolveJsonModule": true,
     "outDir": "dist",
     "types": ["node", "hardhat"]
   },
-  "include": ["hardhat.config.ts", "scripts", "test", "typechain-types"],
+  "include": ["hardhat.config.ts", "deploy", "scripts", "test", "typechain-types"],
   "exclude": ["dist"]
 }
 EOF
 
-# hardhat.config.ts — toolbox-viem + TypeChain + plugins + HH3 networks
+# Hardhat v2 config (classic networks shape; toolbox + ethers v6; plugins)
 cat > packages/contracts/hardhat.config.ts <<'EOF'
-import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { config as loadEnv } from 'dotenv'
 import type { HardhatUserConfig } from 'hardhat/config'
 
-import '@nomicfoundation/hardhat-toolbox-viem'
+import '@nomicfoundation/hardhat-toolbox'
 import '@typechain/hardhat'
 import 'hardhat-deploy'
 import 'hardhat-gas-reporter'
 import 'hardhat-contract-sizer'
-// import 'hardhat-docgen' // installed; enable if you want docs generated
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+import 'hardhat-docgen'
 
 loadEnv({ path: resolve(__dirname, '.env.hardhat.local') })
 
 const privateKey = process.env.PRIVATE_KEY?.trim()
 const mnemonic = process.env.MNEMONIC?.trim()
-const accounts = privateKey ? [privateKey] : mnemonic ? { mnemonic } : undefined
-
-// Hardhat v3 requires "type" on networks
-const networks: any = {
-  hardhat: { type: 'edr-simulated' }
-}
-const addHttp = (name: string, url?: string) => {
-  const u = url?.trim()
-  if (!u) return
-  networks[name] = { type: 'http', url: u, ...(accounts ? { accounts } : {}) }
-}
-addHttp('mainnet', process.env.MAINNET_RPC)
-addHttp('polygon', process.env.POLYGON_RPC)
-addHttp('optimism', process.env.OPTIMISM_RPC)
-addHttp('arbitrum', process.env.ARBITRUM_RPC)
-addHttp('sepolia', process.env.SEPOLIA_RPC)
+const accounts: any = privateKey ? [privateKey] : mnemonic ? { mnemonic } : undefined
 
 const config: HardhatUserConfig = {
   solidity: { version: '0.8.28', settings: { optimizer: { enabled: true, runs: 200 } } },
   defaultNetwork: 'hardhat',
-  networks,
-  verify: { etherscan: { apiKey: process.env.ETHERSCAN_API_KEY || '' } },
-  // hardhat-deploy named account
+  networks: {
+    hardhat: {},
+    ...(process.env.SEPOLIA_RPC ? { sepolia: { url: process.env.SEPOLIA_RPC!, accounts } } : {}),
+    ...(process.env.MAINNET_RPC ? { mainnet: { url: process.env.MAINNET_RPC!, accounts } } : {}),
+    ...(process.env.POLYGON_RPC ? { polygon: { url: process.env.POLYGON_RPC!, accounts } } : {}),
+    ...(process.env.OPTIMISM_RPC ? { optimism: { url: process.env.OPTIMISM_RPC!, accounts } } : {}),
+    ...(process.env.ARBITRUM_RPC ? { arbitrum: { url: process.env.ARBITRUM_RPC!, accounts } } : {})
+  },
   namedAccounts: { deployer: { default: 0 } },
-  // reporters
   gasReporter: { enabled: true, currency: 'USD' },
   contractSizer: { runOnCompile: true },
+  docgen: { outputDir: './docs', pages: 'items', collapseNewlines: true },
   paths: {
-    root: resolve(__dirname),
     sources: resolve(__dirname, 'contracts'),
     tests: resolve(__dirname, 'test'),
     cache: resolve(__dirname, 'cache'),
     artifacts: resolve(__dirname, '../../apps/dao-dapp/src/contracts')
-  }
+  },
+  etherscan: { apiKey: process.env.ETHERSCAN_API_KEY || '' }
 }
 export default config
 EOF
 
-# Contracts dirs and placeholders
-mkdir -p packages/contracts/contracts
+# Dirs & example deploy
+mkdir -p packages/contracts/contracts packages/contracts/deploy packages/contracts/scripts packages/contracts/test
 echo "// Add your Solidity contracts here." > packages/contracts/contracts/.gitkeep
 
-mkdir -p packages/contracts/scripts
-cat > packages/contracts/scripts/deploy.ts <<'EOF'
-async function main() {
-  console.log('Use hardhat-deploy in /deploy or implement custom deploy logic here.')
-}
-main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
-EOF
-
-mkdir -p packages/contracts/deploy
 cat > packages/contracts/deploy/00_sample.ts <<'EOF'
 import type { DeployFunction } from 'hardhat-deploy/types'
 
@@ -320,51 +294,54 @@ export default func
 func.tags = ['all']
 EOF
 
-mkdir -p packages/contracts/test
-echo "// Add your Hardhat tests here." > packages/contracts/test/.gitkeep
+cat > packages/contracts/scripts/deploy.ts <<'EOF'
+async function main() {
+  console.log('Use hardhat-deploy scripts in /deploy, or implement custom logic here.')
+}
+main().catch((e) => { console.error(e); process.exitCode = 1 })
+EOF
 
-# .env examples
+echo "// Add your tests here" > packages/contracts/test/.gitkeep
+
+# .env for contracts
 cat > packages/contracts/.env.hardhat.example <<'EOF'
-# Private key or mnemonic for deployments (set one of the two)
 PRIVATE_KEY=
 MNEMONIC=
 
-# RPC endpoints (HTTPS)
 MAINNET_RPC=
 POLYGON_RPC=
 OPTIMISM_RPC=
 ARBITRUM_RPC=
 SEPOLIA_RPC=
 
-# Block explorer API key (Etherscan family)
 ETHERSCAN_API_KEY=
-
-# CoinMarketCap API key (optional, for gas-reporter USD estimates)
 CMC_API_KEY=
 EOF
 cp -f packages/contracts/.env.hardhat.example packages/contracts/.env.hardhat.local
 
-# Dev deps for contracts (HH3 + toolbox-viem + TS + plugins + typechain)
-pnpm --dir packages/contracts add -D hardhat@^3 @nomicfoundation/hardhat-toolbox-viem@^5.0.0 typescript@~5.9.2 ts-node@~10.9.2 @types/node@^22 dotenv@^16
-pnpm --dir packages/contracts add -D typechain @typechain/ethers-v6 @typechain/hardhat
-pnpm --dir packages/contracts add -D hardhat-deploy hardhat-gas-reporter hardhat-contract-sizer
-# Docgen installed but disabled in config by default (uncomment import+block to enable)
-pnpm --dir packages/contracts add -D hardhat-docgen
-# OpenZeppelin (runtime)
+# --- Install contracts deps (HH2 lane) ---------------------------------------
+pnpm --dir packages/contracts add -D \
+  hardhat@^2.22.10 \
+  @nomicfoundation/hardhat-toolbox@^4.0.0 \
+  typescript@~5.9.2 ts-node@~10.9.2 @types/node@^22 dotenv@^16 \
+  typechain @typechain/ethers-v6 @typechain/hardhat \
+  hardhat-deploy hardhat-gas-reporter hardhat-contract-sizer hardhat-docgen
+
+# Runtime deps
 pnpm --dir packages/contracts add @openzeppelin/contracts @openzeppelin/contracts-upgradeable
 
-# Install workspace deps (root lockfile)
+# Install workspace lock
 pnpm install
 
 # --- Foundry (Forge/Anvil) ---------------------------------------------------
 stop_anvil
 if [ ! -x "$HOME/.foundry/bin/forge" ]; then
-  info "Installing Foundry..."
+  info "Installing Foundry…"
   curl -L https://foundry.paradigm.xyz | bash
 fi
-"$HOME/.foundry/bin/foundryup" || warn "foundryup failed; run manually with pnpm foundry:update"
+"$HOME/.foundry/bin/foundryup" || warn "foundryup failed; rerun later with: pnpm foundry:update"
 
-# foundry.toml and sample test
+# foundry.toml + sample test
 cat > packages/contracts/foundry.toml <<'EOF'
 [profile.default]
 src = "contracts"
@@ -385,7 +362,6 @@ runs = 64
 depth = 64
 fail_on_revert = true
 EOF
-
 mkdir -p packages/contracts/forge-test
 cat > packages/contracts/forge-test/Sample.t.sol <<'EOF'
 // SPDX-License-Identifier: MIT
@@ -396,7 +372,7 @@ contract SampleTest is Test {
 }
 EOF
 
-# ----- lint/format & Husky ---------------------------------------------------
+# --- Lint/format & Husky -----------------------------------------------------
 pnpm -w add -D eslint prettier husky lint-staged
 pnpm --dir packages/contracts add -D solhint prettier prettier-plugin-solidity
 
@@ -444,7 +420,14 @@ fi
 EOF
 chmod +x .husky/pre-commit
 
-# ----- CI --------------------------------------------------------------------
+cat > .lintstagedrc.json <<'EOF'
+{
+  "*.{ts,tsx,js}": ["eslint --fix", "prettier --write"],
+  "packages/contracts/**/*.sol": ["prettier --write", "solhint --fix"]
+}
+EOF
+
+# --- CI ----------------------------------------------------------------------
 cat > .github/workflows/ci.yml <<'EOF'
 name: CI
 on:
@@ -475,13 +458,13 @@ jobs:
       - run: pnpm --filter contracts exec solhint 'contracts/**/*.sol' || true
 EOF
 
-# ----- README ----------------------------------------------------------------
+# --- README ------------------------------------------------------------------
 cat > README.md <<'EOF'
 # DApp Setup (Rookie-friendly)
 
 **Frontend**: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v4  
-**Contracts**: Hardhat v3 (ESM) + toolbox-viem, OpenZeppelin, Foundry (Forge/Anvil)  
-**DX**: TypeChain, hardhat-deploy, gas reporter, contract sizer (docgen optional), Solhint/Prettier, Husky  
+**Contracts**: Hardhat v2 + @nomicfoundation/hardhat-toolbox (ethers v6), OpenZeppelin, TypeChain, hardhat-deploy  
+**DX**: Foundry (Forge/Anvil), gas-reporter, contract-sizer, docgen, Solhint/Prettier, Husky  
 **CI**: GitHub Actions
 
 ## 1) First-time setup
@@ -521,7 +504,7 @@ Contracts (Hardhat):
 pnpm contracts:compile
 pnpm contracts:test
 pnpm contracts:deploy
-pnpm contracts:verify 0xYourContract
+pnpm contracts:verify
 ```
 
 Contracts (Foundry):
@@ -532,7 +515,7 @@ pnpm forge:fmt
 pnpm foundry:update
 ```
 
-## 3) Add a contract (OpenZeppelin)
+## 3) Example contract (OpenZeppelin)
 
 Create `packages/contracts/contracts/MyToken.sol`:
 
@@ -545,7 +528,7 @@ contract MyToken is ERC20 {
 }
 ```
 
-Deploy with `hardhat-deploy` (create `packages/contracts/deploy/01_mytoken.ts`):
+Deploy (create `packages/contracts/deploy/01_mytoken.ts`):
 
 ```ts
 import type { DeployFunction } from 'hardhat-deploy/types'
@@ -565,24 +548,17 @@ pnpm --filter contracts exec hardhat deploy --network sepolia --tags MyToken
 
 Artifacts (ABIs) appear in `apps/dao-dapp/src/contracts/`.
 
-## 4) Lint/format
+## 4) Docs (optional)
 
-* TS: ESLint + Prettier
-* Solidity: Solhint + Prettier (solidity plugin)
-
-Husky runs fixes on commit; CI runs tests & lint.
-
-## 5) Docs (optional)
-
-Enable `hardhat-docgen` by uncommenting the import and `docgen` block in `hardhat.config.ts`.
+`hardhat-docgen` is enabled; docs will be generated into `packages/contracts/docs` on compile.
 EOF
 
-# ----- Git init (optional) ---------------------------------------------------
+# --- Git init ----------------------------------------------------------------
 
 if command -v git >/dev/null 2>&1; then
 git init
 git add -A
-git -c user.name="bootstrap" -c user.email="bootstrap\@local" commit -m "chore: bootstrap DApp workspace" || true
+git -c user.name="bootstrap" -c user.email="bootstrap\@local" commit -m "chore: bootstrap DApp workspace (HH2 lane)" || true
 fi
 
 ok "Setup complete."

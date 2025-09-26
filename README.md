@@ -1,38 +1,169 @@
-# DApp Setup
+# DApp Setup (Rookie-friendly)
 
-A simple script to bootstrap a complete DApp development environment with React frontend and Hardhat smart contracts.
+This repo bootstraps a modern DApp workspace:
 
-## Quick Start
+- **Frontend**: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v4
+- **Contracts**: Hardhat v3 (ESM) + toolbox-viem, **OpenZeppelin**, **Foundry (Forge/Anvil)**
+- **DX**: TypeChain, hardhat-deploy, gas reporter, contract sizer, docgen, Solhint/Prettier, Husky hooks
+- **CI**: GitHub Actions (compile, test, lint)
 
-1. **Create a new empty folder** for your DApp project
-2. **Copy `setup.sh`** into that folder
-3. **Execute the setup script**:
-   ```bash
-   bash setup.sh
-   ```
-4. **Follow the instructions** displayed after the script completes
+---
 
-## What You Get
+## 1) First-time setup
 
-- **React + TypeScript** frontend with Vite
-- **Web3 integration** with Wagmi, Viem, and RainbowKit
-- **Hardhat** smart contract development environment
-- **Tailwind CSS** for styling
-- **Monorepo structure** with pnpm workspace
-- **Pre-configured** for multiple networks (Ethereum, Polygon, Optimism, Arbitrum, Sepolia)
+```bash
+# Make a new folder, copy setup.sh, then:
+bash setup.sh
+```
 
-## Next Steps
+Fill in env files:
 
-After running the script, you'll need to:
+* `apps/dao-dapp/.env.local`
 
-1. Edit `apps/dao-dapp/.env.local` - Set your WalletConnect ID and RPC URLs
-2. Edit `packages/contracts/.env.hardhat.local` - Set your deployer key and RPC URLs
-3. Run `pnpm contracts:compile` - Compile your smart contracts
-4. Run `pnpm web:dev` - Start the development server
+  * `VITE_WALLETCONNECT_ID=...`
+  * RPC URLs (mainnet/polygon/optimism/arbitrum/sepolia)
 
-## Requirements
+* `packages/contracts/.env.hardhat.local`
 
-- Node.js 22 LTS (recommended)
-- Internet access
+  * `PRIVATE_KEY=` or `MNEMONIC=`
+  * `SEPOLIA_RPC=...` (and others you use)
+  * `ETHERSCAN_API_KEY=...` (for verification)
+  * optional `CMC_API_KEY=` (gas reporter USD)
 
-That's it! Your DApp development environment is ready to go.
+Optional native speedups:
+
+```bash
+pnpm approve-builds
+# select: bufferutil, utf-8-validate, keccak, secp256k1
+```
+
+---
+
+## 2) Everyday commands
+
+**Frontend**
+
+```bash
+pnpm web:dev       # run the React app
+pnpm web:build     # production build
+pnpm web:preview   # preview the build
+```
+
+**Local chain**
+
+```bash
+pnpm anvil         # start local EVM at http://127.0.0.1:8545
+```
+
+**Contracts (Hardhat)**
+
+```bash
+pnpm contracts:compile
+pnpm contracts:test
+pnpm contracts:deploy
+pnpm contracts:verify 0xYourContractAddress
+```
+
+**Contracts (Foundry)**
+
+```bash
+pnpm forge:test    # very fast tests + fuzzing
+pnpm forge:fmt     # format Solidity
+```
+
+Husky will auto-run formatting/lint for TS/Solidity on each commit.
+
+---
+
+## 3) Adding contracts (OpenZeppelin)
+
+Create a new file under `packages/contracts/contracts/`:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+contract MyToken is ERC20 {
+    constructor() ERC20("MyToken", "MTK") {
+        _mint(msg.sender, 1_000_000 ether);
+    }
+}
+```
+
+**Deploy** via `hardhat-deploy`: create `packages/contracts/deploy/01_mytoken.ts`:
+
+```ts
+import type { DeployFunction } from 'hardhat-deploy/types'
+
+const func: DeployFunction = async ({ deployments, getNamedAccounts }) => {
+  const { deploy } = deployments
+  const { deployer } = await getNamedAccounts()
+  await deploy('MyToken', { from: deployer, args: [], log: true })
+}
+export default func
+func.tags = ['MyToken']
+```
+
+Run:
+
+```bash
+pnpm contracts:compile
+pnpm --filter contracts exec hardhat deploy --network sepolia --tags MyToken
+```
+
+Artifacts (ABIs, addresses) are exported to `apps/dao-dapp/src/contracts/` for the frontend.
+
+---
+
+## 4) Frontend usage (wagmi)
+
+Inside `apps/dao-dapp`, you can import your ABI (from `src/contracts`) and use wagmi hooks:
+
+```ts
+import { Address, createConfig } from 'wagmi'
+import { readContract } from 'wagmi/actions'
+```
+
+(You already have `RainbowKit + wagmi` pre-wired through `src/config/wagmi.ts`.)
+
+---
+
+## 5) Gas, size, docs
+
+* **Gas**: `hardhat-gas-reporter` prints gas & USD estimates on test runs.
+* **Size**: `hardhat-contract-sizer` reports bytecode size on compile (helps avoid 24KB limit).
+* **Docs**: `hardhat-docgen` outputs Markdown docs to `packages/contracts/docs/` on compile.
+
+---
+
+## 6) Linting & formatting
+
+* **Solidity**: `solhint` + `prettier-plugin-solidity`
+* **TS/JS**: `eslint` + `prettier`
+* **Hooks**: Husky runs fixes on commit; CI runs lint and tests on PRs.
+
+---
+
+## 7) Static analysis (optional)
+
+Install Slither locally (recommended):
+
+```bash
+# install pipx first, then:
+pipx install slither-analyzer
+cd packages/contracts
+slither .
+```
+
+---
+
+## 8) Tips
+
+* Prefer **Foundry** for fast unit + fuzz tests (`forge test`).
+* Use **hardhat-deploy** for reproducible deployments and tagging.
+* Keep upgradeable patterns safe (no constructors/immutables in implementation; use OZ Upgradeable if needed).
+* Check the `docs/`, `gas`, and `size` outputs regularly to catch regressions early.
+
+Happy shipping! 🚀

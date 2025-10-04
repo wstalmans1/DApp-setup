@@ -70,6 +70,8 @@ cat > package.json <<'EOF'
     "contracts:test": "pnpm --filter contracts run test",
     "contracts:deploy": "pnpm --filter contracts run deploy",
     "contracts:verify": "pnpm --filter contracts exec hardhat etherscan-verify",
+    "contracts:docs": "pnpm --filter contracts run docs",
+    "contracts:lint:natspec": "pnpm --filter contracts run lint:natspec",
 
     "anvil:start": "anvil --block-time 1",
     "anvil:stop": "pkill -f '^anvil( |$)' || true",
@@ -209,7 +211,9 @@ cat > packages/contracts/package.json <<'EOF'
     "test": "hardhat test",
     "deploy": "hardhat deploy",
     "deploy:tags": "hardhat deploy --tags all",
-    "etherscan-verify": "hardhat etherscan-verify"
+    "etherscan-verify": "hardhat etherscan-verify",
+    "docs": "hardhat docgen",
+    "lint:natspec": "solhint 'contracts/**/*.sol' --config .solhint.json"
   }
 }
 EOF
@@ -252,7 +256,17 @@ const mnemonic = process.env.MNEMONIC?.trim()
 const accounts: any = privateKey ? [privateKey] : mnemonic ? { mnemonic } : undefined
 
 const config: HardhatUserConfig = {
-  solidity: { version: '0.8.28', settings: { optimizer: { enabled: true, runs: 200 } } },
+  solidity: { 
+    version: '0.8.28', 
+    settings: { 
+      optimizer: { enabled: true, runs: 200 },
+      outputSelection: {
+        '*': {
+          '*': ['*', 'evm.bytecode.object', 'evm.deployedBytecode.object', 'metadata']
+        }
+      }
+    } 
+  },
   defaultNetwork: 'hardhat',
   networks: {
     hardhat: {},
@@ -265,7 +279,17 @@ const config: HardhatUserConfig = {
   namedAccounts: { deployer: { default: 0 } },
   gasReporter: { enabled: true, currency: 'USD' },
   contractSizer: { runOnCompile: true },
-  docgen: { outputDir: './docs', pages: 'items', collapseNewlines: true },
+  docgen: { 
+    outputDir: './docs', 
+    pages: 'items', 
+    collapseNewlines: true,
+    clear: true,
+    runOnCompile: true,
+    only: ['contracts/**/*.sol'],
+    except: ['contracts/test/**/*.sol', 'contracts/mocks/**/*.sol'],
+    template: 'templates',
+    theme: 'markdown'
+  },
   paths: {
     sources: resolve(__dirname, 'contracts'),
     tests: resolve(__dirname, 'test'),
@@ -279,19 +303,115 @@ EOF
 
 # Dirs & example deploy
 mkdir -p packages/contracts/contracts packages/contracts/deploy packages/contracts/scripts packages/contracts/test
-echo "// Add your Solidity contracts here." > packages/contracts/contracts/.gitkeep
+# Create example contract with comprehensive NatSpec documentation
+cat > packages/contracts/contracts/ExampleToken.sol <<'EOF'
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
 
-cat > packages/contracts/deploy/00_sample.ts <<'EOF'
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
+/**
+ * @title ExampleToken
+ * @author Your Name
+ * @notice This is an example ERC20 token contract with comprehensive NatSpec documentation
+ * @dev This contract demonstrates proper NatSpec usage for documentation generation
+ * @custom:security-contact security@example.com
+ */
+contract ExampleToken is ERC20, Ownable {
+    /// @notice Maximum supply of tokens that can ever be minted
+    /// @dev Set to 1 billion tokens with 18 decimals
+    uint256 public constant MAX_SUPPLY = 1_000_000_000 * 10**18;
+
+    /// @notice Address of the treasury where fees are collected
+    /// @dev Can be updated by the owner
+    address public treasury;
+
+    /// @notice Emitted when the treasury address is updated
+    /// @param oldTreasury The previous treasury address
+    /// @param newTreasury The new treasury address
+    event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+
+    /// @notice Emitted when tokens are minted
+    /// @param to The address that received the tokens
+    /// @param amount The amount of tokens minted
+    event TokensMinted(address indexed to, uint256 amount);
+
+    /**
+     * @notice Constructs the ExampleToken contract
+     * @dev Initializes the ERC20 token with name "Example Token" and symbol "EXT"
+     * @param initialOwner The address that will be set as the initial owner
+     * @param initialTreasury The initial treasury address for fee collection
+     */
+    constructor(address initialOwner, address initialTreasury) ERC20("Example Token", "EXT") Ownable(initialOwner) {
+        require(initialTreasury != address(0), "ExampleToken: treasury cannot be zero address");
+        treasury = initialTreasury;
+    }
+
+    /**
+     * @notice Mints tokens to a specified address
+     * @dev Only the owner can mint tokens, and the total supply cannot exceed MAX_SUPPLY
+     * @param to The address to mint tokens to
+     * @param amount The amount of tokens to mint
+     * @return success True if the minting was successful
+     */
+    function mint(address to, uint256 amount) external onlyOwner returns (bool success) {
+        require(to != address(0), "ExampleToken: cannot mint to zero address");
+        require(totalSupply() + amount <= MAX_SUPPLY, "ExampleToken: would exceed max supply");
+        
+        _mint(to, amount);
+        emit TokensMinted(to, amount);
+        return true;
+    }
+
+    /**
+     * @notice Updates the treasury address
+     * @dev Only the owner can update the treasury address
+     * @param newTreasury The new treasury address
+     */
+    function updateTreasury(address newTreasury) external onlyOwner {
+        require(newTreasury != address(0), "ExampleToken: treasury cannot be zero address");
+        address oldTreasury = treasury;
+        treasury = newTreasury;
+        emit TreasuryUpdated(oldTreasury, newTreasury);
+    }
+
+    /**
+     * @notice Returns the current treasury address
+     * @dev This is a view function that doesn't modify state
+     * @return The current treasury address
+     */
+    function getTreasury() external view returns (address) {
+        return treasury;
+    }
+
+    /**
+     * @notice Returns the maximum supply of tokens
+     * @dev This is a view function that returns the constant MAX_SUPPLY
+     * @return The maximum supply of tokens
+     */
+    function getMaxSupply() external pure returns (uint256) {
+        return MAX_SUPPLY;
+    }
+}
+EOF
+
+cat > packages/contracts/deploy/00_example_token.ts <<'EOF'
 import type { DeployFunction } from 'hardhat-deploy/types'
 
 const func: DeployFunction = async ({ deployments, getNamedAccounts }) => {
   const { deploy } = deployments
   const { deployer } = await getNamedAccounts()
-  console.log('No contracts to deploy yet.')
-  // await deploy('MyContract', { from: deployer, args: [], log: true })
+  
+  // Deploy ExampleToken with comprehensive NatSpec documentation
+  await deploy('ExampleToken', {
+    from: deployer,
+    args: [deployer, deployer], // initialOwner and initialTreasury both set to deployer
+    log: true,
+  })
 }
 export default func
-func.tags = ['all']
+func.tags = ['ExampleToken', 'all']
 EOF
 
 cat > packages/contracts/scripts/deploy.ts <<'EOF'
@@ -392,7 +512,17 @@ cat > .prettierrc.json <<'EOF'
   "trailingComma": "all",
   "printWidth": 100,
   "overrides": [
-    { "files": "*.sol", "options": { "plugins": ["prettier-plugin-solidity"] } }
+    { 
+      "files": "*.sol", 
+      "options": { 
+        "plugins": ["prettier-plugin-solidity"],
+        "printWidth": 120,
+        "tabWidth": 4,
+        "useTabs": false,
+        "bracketSpacing": true,
+        "explicitTypes": "always"
+      } 
+    }
   ]
 }
 EOF
@@ -402,7 +532,14 @@ cat > packages/contracts/.solhint.json <<'EOF'
   "extends": ["solhint:recommended"],
   "rules": {
     "func-visibility": ["error", { "ignoreConstructors": true }],
-    "max-line-length": ["warn", 120]
+    "max-line-length": ["warn", 120],
+    "natspec": "error",
+    "natspec-return": "error",
+    "natspec-param": "error",
+    "natspec-constructor": "error",
+    "natspec-function": "error",
+    "natspec-event": "error",
+    "natspec-modifier": "error"
   }
 }
 EOF
@@ -465,6 +602,7 @@ cat > README.md <<'EOF'
 **Frontend**: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v4  
 **Contracts**: Hardhat v2 + @nomicfoundation/hardhat-toolbox (ethers v6), OpenZeppelin, TypeChain, hardhat-deploy  
 **DX**: Foundry (Forge/Anvil), gas-reporter, contract-sizer, docgen, Solhint/Prettier, Husky  
+**Documentation**: Comprehensive NatSpec support with linting, validation, and auto-generation  
 **CI**: GitHub Actions
 
 ## 1) First-time setup
@@ -505,6 +643,8 @@ pnpm contracts:compile
 pnpm contracts:test
 pnpm contracts:deploy
 pnpm contracts:verify
+pnpm contracts:docs          # Generate documentation from NatSpec
+pnpm contracts:lint:natspec  # Lint NatSpec documentation
 ```
 
 Contracts (Foundry):
@@ -548,9 +688,35 @@ pnpm --filter contracts exec hardhat deploy --network sepolia --tags MyToken
 
 Artifacts (ABIs) appear in `apps/dao-dapp/src/contracts/`.
 
-## 4) Docs (optional)
+## 4) NatSpec Documentation
 
-`hardhat-docgen` is enabled; docs will be generated into `packages/contracts/docs` on compile.
+This setup includes comprehensive NatSpec support:
+
+### Features:
+- **NatSpec Linting**: Solhint rules enforce proper documentation format
+- **Auto-generation**: Documentation generated automatically on compile
+- **Validation**: NatSpec comments are validated during development
+- **Formatting**: Prettier ensures consistent NatSpec formatting
+
+### Commands:
+```bash
+pnpm contracts:docs          # Generate HTML documentation
+pnpm contracts:lint:natspec  # Check NatSpec compliance
+```
+
+### NatSpec Tags Supported:
+- `@title` - Contract/function title
+- `@notice` - User-facing description
+- `@dev` - Developer notes
+- `@param` - Parameter descriptions
+- `@return` - Return value descriptions
+- `@author` - Author information
+- `@custom:*` - Custom tags
+
+### Example:
+See `packages/contracts/contracts/ExampleToken.sol` for a comprehensive example.
+
+Documentation is generated into `packages/contracts/docs` on compile.
 EOF
 
 # --- Git init ----------------------------------------------------------------

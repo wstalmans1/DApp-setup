@@ -119,6 +119,10 @@ cat > package.json <<'EOF'
     "contracts:verify:stdjson": "pnpm --filter contracts exec ts-node scripts/verify-stdjson.ts",
     "contracts:debug": "pnpm --filter contracts exec ts-node scripts/debug-deployment.ts",
     "contracts:tally": "pnpm --filter contracts exec ts-node scripts/generate-tally-proposal.ts",
+    "contracts:factory-proposal": "pnpm --filter contracts exec ts-node scripts/generate-factory-proposal.ts",
+    "contracts:deploy-upgradeable": "pnpm --filter contracts exec ts-node scripts/deploy-upgradeable.ts",
+    "contracts:upgrade": "pnpm --filter contracts exec ts-node scripts/upgrade-contract.ts",
+    "contracts:verify-upgradeable": "pnpm --filter contracts exec ts-node scripts/verify-upgradeable.ts",
     "contracts:docs": "pnpm --filter contracts run docs",
     "contracts:lint:natspec": "pnpm --filter contracts run lint:natspec",
 
@@ -208,44 +212,6 @@ export const config = getDefaultConfig({
   },
   ssr: false
 })
-
-// Enhanced configuration for factory patterns and multi-explorer support
-export const enhancedConfig = {
-  // Chain configuration
-  chainId: import.meta.env.VITE_CHAIN_ID ? parseInt(import.meta.env.VITE_CHAIN_ID) : 11155111,
-  
-  // Factory and Registry contracts
-  factory: {
-    address: import.meta.env.VITE_FACTORY_ADDRESS,
-    chainId: import.meta.env.VITE_FACTORY_CHAIN_ID ? parseInt(import.meta.env.VITE_FACTORY_CHAIN_ID) : 11155111,
-    chainName: import.meta.env.VITE_FACTORY_CHAIN_NAME || 'Sepolia'
-  },
-  registry: {
-    address: import.meta.env.VITE_REGISTRY_ADDRESS,
-    chainId: import.meta.env.VITE_REGISTRY_CHAIN_ID ? parseInt(import.meta.env.VITE_REGISTRY_CHAIN_ID) : 11155111
-  },
-  
-  // Block explorers
-  explorers: {
-    primary: import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://sepolia.etherscan.io',
-    secondary: import.meta.env.VITE_BLOCKSCOUT_URL || 'https://eth-sepolia.blockscout.com'
-  },
-  
-  // Tally integration
-  tally: {
-    apiUrl: import.meta.env.VITE_TALLY_API_URL || 'https://api.tally.xyz',
-    apiKey: import.meta.env.VITE_TALLY_API_KEY
-  },
-  
-  // Alchemy integration
-  alchemy: {
-    apiKey: import.meta.env.VITE_ALCHEMY_API_KEY
-  },
-  
-  // Debug settings
-  debug: import.meta.env.VITE_DEBUG === 'true',
-  verboseLogging: import.meta.env.VITE_VERBOSE_LOGGING === 'true'
-}
 EOF
 
 # main.tsx
@@ -296,73 +262,12 @@ EOF
 
 # Env example
 cat > apps/dao-dapp/.env.example <<'EOF'
-# =============================================================================
-# ENHANCED Frontend Environment Variables
-# =============================================================================
-# This file supports the enhanced setup.sh with factory patterns, multi-explorer
-# verification, Tally integration, and comprehensive tooling.
-
-# =============================================================================
-# WALLET CONNECTION
-# =============================================================================
 VITE_WALLETCONNECT_ID=
-
-# =============================================================================
-# RPC ENDPOINTS (Frontend)
-# =============================================================================
 VITE_MAINNET_RPC=https://cloudflare-eth.com
 VITE_POLYGON_RPC=https://polygon-rpc.com
 VITE_OPTIMISM_RPC=https://optimism.publicnode.com
 VITE_ARBITRUM_RPC=https://arbitrum.publicnode.com
-VITE_SEPOLIA_RPC=
-
-# =============================================================================
-# ALCHEMY INTEGRATION
-# =============================================================================
-# Alchemy API key for frontend clients (used by Wagmi/Viem)
-VITE_ALCHEMY_API_KEY=
-
-# =============================================================================
-# CHAIN CONFIGURATION
-# =============================================================================
-VITE_CHAIN_ID=11155111
-
-# =============================================================================
-# FACTORY & REGISTRY CONTRACTS
-# =============================================================================
-# Factory contract configuration
-VITE_FACTORY_ADDRESS=0x0000000000000000000000000000000000000000
-VITE_FACTORY_CHAIN_ID=11155111
-VITE_FACTORY_CHAIN_NAME=Sepolia
-
-# Registry contract configuration
-VITE_REGISTRY_ADDRESS=0x0000000000000000000000000000000000000000
-VITE_REGISTRY_CHAIN_ID=11155111
-
-# =============================================================================
-# BLOCK EXPLORER CONFIGURATION
-# =============================================================================
-# Primary explorer (Etherscan)
-VITE_BLOCK_EXPLORER_URL=https://sepolia.etherscan.io
-
-# Secondary explorer (Blockscout) for multi-explorer support
-VITE_BLOCKSCOUT_URL=https://eth-sepolia.blockscout.com
-
-# =============================================================================
-# TALLY INTEGRATION
-# =============================================================================
-# Tally configuration for governance
-VITE_TALLY_API_URL=https://api.tally.xyz
-VITE_TALLY_API_KEY=
-
-# =============================================================================
-# DEBUGGING & DEVELOPMENT
-# =============================================================================
-# Enable debug mode
-VITE_DEBUG=false
-
-# Enable verbose logging
-VITE_VERBOSE_LOGGING=false
+VITE_SEPOLIA_RPC=https://rpc.sepolia.org
 EOF
 cp -f apps/dao-dapp/.env.example apps/dao-dapp/.env.local
 
@@ -417,18 +322,13 @@ import '@nomicfoundation/hardhat-toolbox'
 import '@typechain/hardhat'
 import 'hardhat-deploy'
 import 'hardhat-docgen'
+import '@openzeppelin/hardhat-upgrades'
 
 loadEnv({ path: resolve(__dirname, '.env.hardhat.local') })
 
 const privateKey = process.env.PRIVATE_KEY?.trim()
 const mnemonic = process.env.MNEMONIC?.trim()
 const accounts: any = privateKey ? [privateKey] : mnemonic ? { mnemonic } : undefined
-
-// Enhanced configuration from environment variables
-const verify = process.env.VERIFY === 'true'
-const debug = process.env.DEBUG === 'true'
-const gasPrice = process.env.GAS_PRICE ? parseInt(process.env.GAS_PRICE) : undefined
-const gasLimit = process.env.GAS_LIMIT ? parseInt(process.env.GAS_LIMIT) : undefined
 
 const config: HardhatUserConfig = {
   solidity: { 
@@ -448,46 +348,11 @@ const config: HardhatUserConfig = {
   defaultNetwork: 'hardhat',
   networks: {
     hardhat: {},
-    ...(process.env.SEPOLIA_RPC ? { 
-      sepolia: { 
-        url: process.env.SEPOLIA_RPC!, 
-        accounts,
-        ...(gasPrice && { gasPrice }),
-        ...(gasLimit && { gasLimit })
-      } 
-    } : {}),
-    ...(process.env.MAINNET_RPC ? { 
-      mainnet: { 
-        url: process.env.MAINNET_RPC!, 
-        accounts,
-        ...(gasPrice && { gasPrice }),
-        ...(gasLimit && { gasLimit })
-      } 
-    } : {}),
-    ...(process.env.POLYGON_RPC ? { 
-      polygon: { 
-        url: process.env.POLYGON_RPC!, 
-        accounts,
-        ...(gasPrice && { gasPrice }),
-        ...(gasLimit && { gasLimit })
-      } 
-    } : {}),
-    ...(process.env.OPTIMISM_RPC ? { 
-      optimism: { 
-        url: process.env.OPTIMISM_RPC!, 
-        accounts,
-        ...(gasPrice && { gasPrice }),
-        ...(gasLimit && { gasLimit })
-      } 
-    } : {}),
-    ...(process.env.ARBITRUM_RPC ? { 
-      arbitrum: { 
-        url: process.env.ARBITRUM_RPC!, 
-        accounts,
-        ...(gasPrice && { gasPrice }),
-        ...(gasLimit && { gasLimit })
-      } 
-    } : {})
+    ...(process.env.SEPOLIA_RPC ? { sepolia: { url: process.env.SEPOLIA_RPC!, accounts } } : {}),
+    ...(process.env.MAINNET_RPC ? { mainnet: { url: process.env.MAINNET_RPC!, accounts } } : {}),
+    ...(process.env.POLYGON_RPC ? { polygon: { url: process.env.POLYGON_RPC!, accounts } } : {}),
+    ...(process.env.OPTIMISM_RPC ? { optimism: { url: process.env.OPTIMISM_RPC!, accounts } } : {}),
+    ...(process.env.ARBITRUM_RPC ? { arbitrum: { url: process.env.ARBITRUM_RPC!, accounts } } : {})
   },
   namedAccounts: { deployer: { default: 0 } },
   gasReporter: { 
@@ -495,7 +360,7 @@ const config: HardhatUserConfig = {
     currency: 'USD',
     coinmarketcap: process.env.CMC_API_KEY,
     token: 'ETH',
-    gasPrice: process.env.GAS_PRICE ? parseInt(process.env.GAS_PRICE) : 20
+    gasPrice: 20
   },
   docgen: { 
     outputDir: './docs', 
@@ -680,6 +545,258 @@ contract Factory {
 }
 EOF
 
+# Add Factory with Registry Integration (Production Pattern)
+cat > packages/contracts/contracts/FactoryWithRegistry.sol <<'EOF'
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+import {IContractRegistry} from "./IContractRegistry.sol";
+
+/**
+ * @title FactoryWithRegistry
+ * @author Your Name
+ * @notice A factory contract that deploys contracts and optionally registers them
+ * @dev Extends basic Factory with registry integration for production deployments
+ * @custom:security-contact security@example.com
+ */
+contract FactoryWithRegistry {
+    /// @notice Emitted when a contract is deployed
+    /// @param addr The address of the deployed contract
+    /// @param value The ETH value sent during deployment
+    event Deployed(address indexed addr, uint256 value);
+    
+    /// @notice Emitted when a contract is deployed and registered
+    /// @param addr The address of the deployed contract
+    /// @param registryId The unique identifier in the registry
+    /// @param value The ETH value sent during deployment
+    event DeployedAndRegistered(address indexed addr, bytes32 indexed registryId, uint256 value);
+    
+    /// @notice Error thrown when initcode is empty
+    error EmptyInitcode();
+    
+    /// @notice Error thrown when deployment fails
+    error DeployFailed();
+
+    /**
+     * @notice Deploys a contract from raw initcode
+     * @dev Uses assembly for gas-efficient deployment with proper calldatacopy
+     * @param initcode The bytecode and constructor arguments for the contract to deploy
+     * @return addr The address of the deployed contract
+     */
+    function deploy(bytes calldata initcode) external payable returns (address addr) {
+        if (initcode.length == 0) revert EmptyInitcode();
+        
+        assembly {
+            let ptr := mload(0x40)
+            let len := initcode.length
+            let off := initcode.offset
+            calldatacopy(ptr, off, len)
+            addr := create(callvalue(), ptr, len)
+        }
+        
+        if (addr == address(0)) revert DeployFailed();
+        emit Deployed(addr, msg.value);
+    }
+
+    /**
+     * @notice Deploys a contract and registers it with the registry
+     * @dev Combines deployment and registration in a single transaction
+     * @param initcode The bytecode and constructor arguments for the contract to deploy
+     * @param registry The address of the contract registry (address(0) to skip registration)
+     * @param kind The kind/type identifier for the contract
+     * @param salt The salt used for deployment (for deterministic addresses)
+     * @param version The version number of the contract
+     * @param label A human-readable label for the contract
+     * @param uri A URI for additional metadata
+     * @return addr The address of the deployed contract
+     * @return registryId The unique identifier in the registry (bytes32(0) if not registered)
+     */
+    function deployAndRegister(
+        bytes calldata initcode,
+        address registry,
+        bytes32 kind,
+        bytes32 salt,
+        uint64 version,
+        string calldata label,
+        string calldata uri
+    ) external payable returns (address addr, bytes32 registryId) {
+        // Deploy the contract
+        addr = this.deploy{value: msg.value}(initcode);
+        
+        // Register if registry is provided
+        if (registry != address(0)) {
+            bytes32 initCodeHash = keccak256(initcode);
+            IContractRegistry.Registration memory registration = IContractRegistry.Registration({
+                addr: addr,
+                kind: kind,
+                factory: address(this),
+                salt: salt,
+                initCodeHash: initCodeHash,
+                version: version,
+                label: label,
+                uri: uri
+            });
+            
+            registryId = IContractRegistry(registry).register(registration);
+            emit DeployedAndRegistered(addr, registryId, msg.value);
+        } else {
+            registryId = bytes32(0);
+            emit Deployed(addr, msg.value);
+        }
+    }
+
+    /**
+     * @notice Deploys a contract with CREATE2 for deterministic addresses
+     * @dev Uses CREATE2 opcode for predictable contract addresses
+     * @param salt The salt for deterministic address generation
+     * @param initcode The bytecode and constructor arguments for the contract to deploy
+     * @return addr The address of the deployed contract
+     */
+    function deployCreate2(bytes32 salt, bytes calldata initcode) external payable returns (address addr) {
+        if (initcode.length == 0) revert EmptyInitcode();
+        
+        assembly {
+            let ptr := mload(0x40)
+            let len := initcode.length
+            let off := initcode.offset
+            calldatacopy(ptr, off, len)
+            addr := create2(callvalue(), ptr, len, salt)
+        }
+        
+        if (addr == address(0)) revert DeployFailed();
+        emit Deployed(addr, msg.value);
+    }
+
+    /**
+     * @notice Deploys a contract with CREATE2 and registers it
+     * @dev Combines CREATE2 deployment and registration in a single transaction
+     * @param salt The salt for deterministic address generation
+     * @param initcode The bytecode and constructor arguments for the contract to deploy
+     * @param registry The address of the contract registry (address(0) to skip registration)
+     * @param kind The kind/type identifier for the contract
+     * @param version The version number of the contract
+     * @param label A human-readable label for the contract
+     * @param uri A URI for additional metadata
+     * @return addr The address of the deployed contract
+     * @return registryId The unique identifier in the registry (bytes32(0) if not registered)
+     */
+    function deployCreate2AndRegister(
+        bytes32 salt,
+        bytes calldata initcode,
+        address registry,
+        bytes32 kind,
+        uint64 version,
+        string calldata label,
+        string calldata uri
+    ) external payable returns (address addr, bytes32 registryId) {
+        // Deploy with CREATE2
+        addr = this.deployCreate2{value: msg.value}(salt, initcode);
+        
+        // Register if registry is provided
+        if (registry != address(0)) {
+            bytes32 initCodeHash = keccak256(initcode);
+            IContractRegistry.Registration memory registration = IContractRegistry.Registration({
+                addr: addr,
+                kind: kind,
+                factory: address(this),
+                salt: salt,
+                initCodeHash: initCodeHash,
+                version: version,
+                label: label,
+                uri: uri
+            });
+            
+            registryId = IContractRegistry(registry).register(registration);
+            emit DeployedAndRegistered(addr, registryId, msg.value);
+        } else {
+            registryId = bytes32(0);
+            emit Deployed(addr, msg.value);
+        }
+    }
+}
+EOF
+
+# Add Upgradeable Contract Example (Optional)
+cat > packages/contracts/contracts/UpgradeableToken.sol <<'EOF'
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+
+/**
+ * @title UpgradeableToken
+ * @author Your Name
+ * @notice An upgradeable ERC20 token using UUPS proxy pattern
+ * @dev This contract can be upgraded while maintaining the same address
+ * @custom:security-contact security@example.com
+ */
+contract UpgradeableToken is ERC20Upgradeable, OwnableUpgradeable, UUPSUpgradeable {
+    /// @notice Maximum supply of tokens
+    uint256 public constant MAX_SUPPLY = 1_000_000_000 * 10**18;
+    
+    /// @notice Treasury address for fee collection
+    address public treasury;
+    
+    /// @notice Emitted when treasury is updated
+    event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /**
+     * @notice Initializes the upgradeable token
+     * @dev This function replaces the constructor for upgradeable contracts
+     * @param initialOwner The initial owner of the token
+     * @param initialTreasury The initial treasury address
+     */
+    function initialize(address initialOwner, address initialTreasury) public initializer {
+        __ERC20_init("UpgradeableToken", "UPT");
+        __Ownable_init(initialOwner);
+        __UUPSUpgradeable_init();
+        
+        require(initialTreasury != address(0), "UpgradeableToken: treasury cannot be zero address");
+        treasury = initialTreasury;
+    }
+
+    /**
+     * @notice Mints tokens to a specified address
+     * @dev Only the owner can mint tokens
+     * @param to The address to mint tokens to
+     * @param amount The amount of tokens to mint
+     */
+    function mint(address to, uint256 amount) external onlyOwner {
+        require(to != address(0), "UpgradeableToken: cannot mint to zero address");
+        require(totalSupply() + amount <= MAX_SUPPLY, "UpgradeableToken: would exceed max supply");
+        _mint(to, amount);
+    }
+
+    /**
+     * @notice Updates the treasury address
+     * @dev Only the owner can update the treasury
+     * @param newTreasury The new treasury address
+     */
+    function updateTreasury(address newTreasury) external onlyOwner {
+        require(newTreasury != address(0), "UpgradeableToken: treasury cannot be zero address");
+        address oldTreasury = treasury;
+        treasury = newTreasury;
+        emit TreasuryUpdated(oldTreasury, newTreasury);
+    }
+
+    /**
+     * @notice Authorizes an upgrade
+     * @dev This function is required by UUPSUpgradeable
+     * @param newImplementation The new implementation address
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        // Add any additional authorization logic here
+    }
+}
+EOF
+
 # Add Contract Registry pattern
 cat > packages/contracts/contracts/ContractRegistry.sol <<'EOF'
 // SPDX-License-Identifier: MIT
@@ -771,6 +888,79 @@ const func: DeployFunction = async ({ deployments, getNamedAccounts }) => {
 }
 export default func
 func.tags = ['ExampleToken', 'all']
+EOF
+
+cat > packages/contracts/deploy/01_factory_system.ts <<'EOF'
+import type { DeployFunction } from 'hardhat-deploy/types'
+import { ethers } from 'hardhat'
+
+const func: DeployFunction = async ({ deployments, getNamedAccounts, network }) => {
+  const { deploy } = deployments
+  const { deployer } = await getNamedAccounts()
+
+  // Deploy ContractRegistry first
+  const registry = await deploy('ContractRegistry', {
+    from: deployer,
+    args: [deployer], // timelock/admin
+    log: true,
+  })
+
+  // Deploy basic Factory
+  const factory = await deploy('Factory', {
+    from: deployer,
+    args: [],
+    log: true,
+  })
+
+  // Deploy FactoryWithRegistry
+  const factoryWithRegistry = await deploy('FactoryWithRegistry', {
+    from: deployer,
+    args: [],
+    log: true,
+  })
+
+  // Grant REGISTRAR_ROLE to both factories
+  if (registry.newlyDeployed) {
+    const registryContract = await ethers.getContractAt('ContractRegistry', registry.address)
+    await registryContract.grantRole(await registryContract.REGISTRAR_ROLE(), factory.address)
+    await registryContract.grantRole(await registryContract.REGISTRAR_ROLE(), factoryWithRegistry.address)
+    console.log('✅ Granted REGISTRAR_ROLE to factories')
+  }
+
+  console.log('🏭 Factory System Deployed:')
+  console.log(`   Registry: ${registry.address}`)
+  console.log(`   Factory: ${factory.address}`)
+  console.log(`   FactoryWithRegistry: ${factoryWithRegistry.address}`)
+}
+export default func
+func.tags = ['FactorySystem', 'all']
+func.dependencies = []
+EOF
+
+cat > packages/contracts/deploy/02_upgradeable_system.ts <<'EOF'
+import type { DeployFunction } from 'hardhat-deploy/types'
+import { ethers, upgrades } from 'hardhat'
+
+const func: DeployFunction = async ({ deployments, getNamedAccounts, network }) => {
+  const { deploy } = deployments
+  const { deployer } = await getNamedAccounts()
+
+  // Deploy upgradeable token
+  const UpgradeableToken = await ethers.getContractFactory('UpgradeableToken')
+  const token = await upgrades.deployProxy(UpgradeableToken, [deployer, deployer], {
+    initializer: 'initialize',
+    kind: 'uups'
+  })
+  await token.waitForDeployment()
+
+  console.log('🔄 Upgradeable System Deployed:')
+  console.log(`   UpgradeableToken: ${await token.getAddress()}`)
+  console.log(`   Implementation: ${await upgrades.erc1967.getImplementationAddress(await token.getAddress())}`)
+  console.log(`   Admin: ${await upgrades.erc1967.getAdminAddress(await token.getAddress())}`)
+}
+export default func
+func.tags = ['UpgradeableSystem', 'all']
+func.dependencies = []
 EOF
 
 cat > packages/contracts/scripts/deploy.ts <<'EOF'
@@ -889,19 +1079,168 @@ async function main() {
   if (!target || !functionName) {
     console.log("Usage: pnpm generate-tally <target> <function> [args...]");
     console.log("Example: pnpm generate-tally 0x123... deploy 0x6080...");
+    console.log("Example: pnpm generate-tally 0x123... deployAndRegister 0x6080... 0x456... 0x789... 0x000... 1 'MyToken' 'https://example.com'");
     process.exit(1);
   }
   
   try {
-    const contract = await ethers.getContractAt("Factory", target);
+    const contract = await ethers.getContractAt("FactoryWithRegistry", target);
     const calldata = contract.interface.encodeFunctionData(functionName, args);
     
     console.log("=== Tally Proposal ===");
     console.log(`To: ${target}`);
     console.log(`Value: 0 ETH`);
     console.log(`Data: ${calldata}`);
+    
+    if (functionName === "deployAndRegister") {
+      console.log("\n=== Deploy and Register Parameters ===");
+      console.log(`Initcode: ${args[0]}`);
+      console.log(`Registry: ${args[1]}`);
+      console.log(`Kind: ${args[2]}`);
+      console.log(`Salt: ${args[3]}`);
+      console.log(`Version: ${args[4]}`);
+      console.log(`Label: ${args[5]}`);
+      console.log(`URI: ${args[6]}`);
+    }
   } catch (error: any) {
     console.error("Error generating calldata:", error.message);
+  }
+}
+main().catch(console.error);
+EOF
+
+cat > packages/contracts/scripts/generate-factory-proposal.ts <<'EOF'
+import { ethers } from "hardhat";
+
+async function main() {
+  const factoryAddress = process.argv[2];
+  const registryAddress = process.argv[3];
+  const initcode = process.argv[4];
+  const kind = process.argv[5] || "TOKEN";
+  const label = process.argv[6] || "Deployed Contract";
+  const uri = process.argv[7] || "https://example.com";
+  
+  if (!factoryAddress || !registryAddress || !initcode) {
+    console.log("Usage: pnpm generate-factory-proposal <factory> <registry> <initcode> [kind] [label] [uri]");
+    console.log("Example: pnpm generate-factory-proposal 0x123... 0x456... 0x6080... TOKEN 'MyToken' 'https://example.com'");
+    process.exit(1);
+  }
+  
+  try {
+    const factory = await ethers.getContractAt("FactoryWithRegistry", factoryAddress);
+    
+    // Generate salt (deterministic)
+    const salt = ethers.keccak256(ethers.toUtf8Bytes(`${kind}-${Date.now()}`));
+    const kindHash = ethers.keccak256(ethers.toUtf8Bytes(kind));
+    const version = 1;
+    
+    const calldata = factory.interface.encodeFunctionData("deployAndRegister", [
+      initcode,
+      registryAddress,
+      kindHash,
+      salt,
+      version,
+      label,
+      uri
+    ]);
+    
+    console.log("=== Factory with Registry Tally Proposal ===");
+    console.log(`To: ${factoryAddress}`);
+    console.log(`Value: 0 ETH`);
+    console.log(`Data: ${calldata}`);
+    console.log("\n=== Parameters ===");
+    console.log(`Registry: ${registryAddress}`);
+    console.log(`Kind: ${kind} (${kindHash})`);
+    console.log(`Salt: ${salt}`);
+    console.log(`Version: ${version}`);
+    console.log(`Label: ${label}`);
+    console.log(`URI: ${uri}`);
+    console.log(`Initcode: ${initcode.slice(0, 20)}...`);
+  } catch (error: any) {
+    console.error("Error generating factory proposal:", error.message);
+  }
+}
+main().catch(console.error);
+EOF
+
+cat > packages/contracts/scripts/deploy-upgradeable.ts <<'EOF'
+import { ethers, upgrades } from "hardhat";
+
+async function main() {
+  const [deployer] = await ethers.getSigners();
+  console.log("Deploying upgradeable contracts with account:", deployer.address);
+
+  // Deploy upgradeable token
+  const UpgradeableToken = await ethers.getContractFactory("UpgradeableToken");
+  const token = await upgrades.deployProxy(UpgradeableToken, [deployer.address, deployer.address], {
+    initializer: "initialize",
+    kind: "uups"
+  });
+  await token.waitForDeployment();
+
+  console.log("✅ UpgradeableToken deployed to:", await token.getAddress());
+  console.log("   Implementation:", await upgrades.erc1967.getImplementationAddress(await token.getAddress()));
+  console.log("   Admin:", await upgrades.erc1967.getAdminAddress(await token.getAddress()));
+}
+main().catch(console.error);
+EOF
+
+cat > packages/contracts/scripts/upgrade-contract.ts <<'EOF'
+import { ethers, upgrades } from "hardhat";
+
+async function main() {
+  const proxyAddress = process.argv[2];
+  const newImplementationName = process.argv[3] || "UpgradeableTokenV2";
+  
+  if (!proxyAddress) {
+    console.log("Usage: pnpm upgrade-contract <proxy-address> [new-implementation-name]");
+    console.log("Example: pnpm upgrade-contract 0x123... UpgradeableTokenV2");
+    process.exit(1);
+  }
+
+  console.log(`Upgrading contract at ${proxyAddress} to ${newImplementationName}...`);
+
+  const NewImplementation = await ethers.getContractFactory(newImplementationName);
+  const upgraded = await upgrades.upgradeProxy(proxyAddress, NewImplementation);
+  await upgraded.waitForDeployment();
+
+  console.log("✅ Contract upgraded successfully!");
+  console.log("   Proxy:", await upgraded.getAddress());
+  console.log("   New Implementation:", await upgrades.erc1967.getImplementationAddress(await upgraded.getAddress()));
+}
+main().catch(console.error);
+EOF
+
+cat > packages/contracts/scripts/verify-upgradeable.ts <<'EOF'
+import { ethers, upgrades } from "hardhat";
+
+async function main() {
+  const proxyAddress = process.argv[2];
+  
+  if (!proxyAddress) {
+    console.log("Usage: pnpm verify-upgradeable <proxy-address>");
+    console.log("Example: pnpm verify-upgradeable 0x123...");
+    process.exit(1);
+  }
+
+  console.log(`Verifying upgradeable contract at ${proxyAddress}...`);
+
+  try {
+    const implementationAddress = await upgrades.erc1967.getImplementationAddress(proxyAddress);
+    const adminAddress = await upgrades.erc1967.getAdminAddress(proxyAddress);
+    
+    console.log("📋 Contract Details:");
+    console.log(`   Proxy: ${proxyAddress}`);
+    console.log(`   Implementation: ${implementationAddress}`);
+    console.log(`   Admin: ${adminAddress}`);
+    
+    // Verify implementation
+    console.log("\n🔍 Verifying implementation...");
+    await hre.run("verify:verify", { address: implementationAddress });
+    console.log("✅ Implementation verified!");
+    
+  } catch (error: any) {
+    console.error("❌ Verification failed:", error.message);
   }
 }
 main().catch(console.error);
@@ -997,83 +1336,196 @@ describe("ContractRegistry", function () {
 });
 EOF
 
+cat > packages/contracts/test/FactoryWithRegistry.test.ts <<'EOF'
+import { expect } from "chai";
+import { ethers } from "hardhat";
+
+describe("FactoryWithRegistry", function () {
+  let factory: any;
+  let registry: any;
+  let deployer: any;
+  let registrar: any;
+
+  beforeEach(async function () {
+    [deployer, registrar] = await ethers.getSigners();
+    
+    // Deploy registry
+    const ContractRegistry = await ethers.getContractFactory("ContractRegistry");
+    registry = await ContractRegistry.deploy(deployer.address);
+    await registry.waitForDeployment();
+    
+    // Grant registrar role to factory
+    await registry.grantRole(await registry.REGISTRAR_ROLE(), deployer.address);
+    
+    // Deploy factory
+    const FactoryWithRegistry = await ethers.getContractFactory("FactoryWithRegistry");
+    factory = await FactoryWithRegistry.deploy();
+    await factory.waitForDeployment();
+  });
+
+  it("Should deploy contracts without registration", async function () {
+    const initcode = "0x608060405234801561001057600080fd5b50600080fd5b6103f3806100256000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c8063c29855781461003b578063e1c7392a14610057575b600080fd5b610043610071565b60405161004e91906100a1565b60405180910390f35b61005f610077565b60405161006c91906100a1565b60405180910390f35b600080fd5b600080fd5b6000819050919050565b61009b81610088565b82525050565b60006020820190506100b66000830184610092565b9291505056fea2646970667358221220";
+    
+    const tx = await factory.deploy(initcode);
+    const receipt = await tx.wait();
+    
+    const event = factory.interface.parseLog(receipt.logs[0]);
+    const deployedAddress = event.args.addr;
+    
+    // Verify contract has code
+    const code = await ethers.provider.getCode(deployedAddress);
+    expect(code.length).to.be.greaterThan(100);
+    expect(code).to.not.equal("0x");
+  });
+
+  it("Should deploy and register contracts", async function () {
+    const initcode = "0x608060405234801561001057600080fd5b50600080fd5b6103f3806100256000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c8063c29855781461003b578063e1c7392a14610057575b600080fd5b610043610071565b60405161004e91906100a1565b60405180910390f35b61005f610077565b60405161006c91906100a1565b60405180910390f35b600080fd5b600080fd5b6000819050919050565b61009b81610088565b82525050565b60006020820190506100b66000830184610092565b9291505056fea2646970667358221220";
+    const kind = ethers.keccak256(ethers.toUtf8Bytes("TOKEN"));
+    const salt = ethers.ZeroHash;
+    const version = 1;
+    const label = "TestToken";
+    const uri = "https://example.com";
+    
+    const tx = await factory.deployAndRegister(
+      initcode,
+      await registry.getAddress(),
+      kind,
+      salt,
+      version,
+      label,
+      uri
+    );
+    const receipt = await tx.wait();
+    
+    // Check for both events
+    const deployedEvent = factory.interface.parseLog(receipt.logs[0]);
+    const registeredEvent = factory.interface.parseLog(receipt.logs[1]);
+    
+    expect(deployedEvent.name).to.equal("DeployedAndRegistered");
+    expect(registeredEvent.name).to.equal("Registered");
+    
+    // Verify contract has code
+    const code = await ethers.provider.getCode(deployedEvent.args.addr);
+    expect(code.length).to.be.greaterThan(100);
+  });
+
+  it("Should deploy with CREATE2", async function () {
+    const initcode = "0x608060405234801561001057600080fd5b50600080fd5b6103f3806100256000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c8063c29855781461003b578063e1c7392a14610057575b600080fd5b610043610071565b60405161004e91906100a1565b60405180910390f35b61005f610077565b60405161006c91906100a1565b60405180910390f35b600080fd5b600080fd5b6000819050919050565b61009b81610088565b82525050565b60006020820190506100b66000830184610092565b9291505056fea2646970667358221220";
+    const salt = ethers.keccak256(ethers.toUtf8Bytes("test-salt"));
+    
+    const tx = await factory.deployCreate2(salt, initcode);
+    const receipt = await tx.wait();
+    
+    const event = factory.interface.parseLog(receipt.logs[0]);
+    const deployedAddress = event.args.addr;
+    
+    // Verify contract has code
+    const code = await ethers.provider.getCode(deployedAddress);
+    expect(code.length).to.be.greaterThan(100);
+  });
+
+  it("Should skip registration when registry is zero address", async function () {
+    const initcode = "0x608060405234801561001057600080fd5b50600080fd5b6103f3806100256000396000f3fe608060405234801561001057600080fd5b50600436106100365760003560e01c8063c29855781461003b578063e1c7392a14610057575b600080fd5b610043610071565b60405161004e91906100a1565b60405180910390f35b61005f610077565b60405161006c91906100a1565b60405180910390f35b600080fd5b600080fd5b6000819050919050565b61009b81610088565b82525050565b60006020820190506100b66000830184610092565b9291505056fea2646970667358221220";
+    const kind = ethers.keccak256(ethers.toUtf8Bytes("TOKEN"));
+    const salt = ethers.ZeroHash;
+    const version = 1;
+    const label = "TestToken";
+    const uri = "https://example.com";
+    
+    const tx = await factory.deployAndRegister(
+      initcode,
+      ethers.ZeroAddress, // Zero address = skip registration
+      kind,
+      salt,
+      version,
+      label,
+      uri
+    );
+    const receipt = await tx.wait();
+    
+    // Should only emit Deployed event, not DeployedAndRegistered
+    const event = factory.interface.parseLog(receipt.logs[0]);
+    expect(event.name).to.equal("Deployed");
+    expect(receipt.logs.length).to.equal(1);
+  });
+});
+EOF
+
+cat > packages/contracts/test/UpgradeableToken.test.ts <<'EOF'
+import { expect } from "chai";
+import { ethers, upgrades } from "hardhat";
+
+describe("UpgradeableToken", function () {
+  let token: any;
+  let owner: any;
+  let user: any;
+
+  beforeEach(async function () {
+    [owner, user] = await ethers.getSigners();
+    
+    const UpgradeableToken = await ethers.getContractFactory("UpgradeableToken");
+    token = await upgrades.deployProxy(UpgradeableToken, [owner.address, owner.address], {
+      initializer: "initialize",
+      kind: "uups"
+    });
+    await token.waitForDeployment();
+  });
+
+  it("Should initialize correctly", async function () {
+    expect(await token.name()).to.equal("UpgradeableToken");
+    expect(await token.symbol()).to.equal("UPT");
+    expect(await token.owner()).to.equal(owner.address);
+    expect(await token.treasury()).to.equal(owner.address);
+  });
+
+  it("Should mint tokens", async function () {
+    const amount = ethers.parseEther("1000");
+    await token.mint(user.address, amount);
+    
+    expect(await token.balanceOf(user.address)).to.equal(amount);
+    expect(await token.totalSupply()).to.equal(amount);
+  });
+
+  it("Should update treasury", async function () {
+    await token.updateTreasury(user.address);
+    expect(await token.treasury()).to.equal(user.address);
+  });
+
+  it("Should reject minting from non-owner", async function () {
+    const amount = ethers.parseEther("1000");
+    await expect(token.connect(user).mint(user.address, amount))
+      .to.be.revertedWith("Ownable: caller is not the owner");
+  });
+
+  it("Should reject zero address minting", async function () {
+    const amount = ethers.parseEther("1000");
+    await expect(token.mint(ethers.ZeroAddress, amount))
+      .to.be.revertedWith("UpgradeableToken: cannot mint to zero address");
+  });
+
+  it("Should reject minting beyond max supply", async function () {
+    const maxSupply = await token.MAX_SUPPLY();
+    const amount = maxSupply + 1n;
+    
+    await expect(token.mint(user.address, amount))
+      .to.be.revertedWith("UpgradeableToken: would exceed max supply");
+  });
+});
+EOF
+
 # .env for contracts
 cat > packages/contracts/.env.hardhat.example <<'EOF'
-# =============================================================================
-# ENHANCED DApp Development Environment Variables
-# =============================================================================
-# This file supports the enhanced setup.sh with factory patterns, multi-explorer
-# verification, Tally integration, and comprehensive tooling.
-
-# =============================================================================
-# DEPLOYMENT CREDENTIALS
-# =============================================================================
-# Private key or mnemonic for deployments (set one of the two)
 PRIVATE_KEY=
 MNEMONIC=
 
-# =============================================================================
-# RPC ENDPOINTS (HTTPS)
-# =============================================================================
-# Main networks
-MAINNET_RPC=https://cloudflare-eth.com
-POLYGON_RPC=https://polygon-rpc.com
-OPTIMISM_RPC=https://optimism.publicnode.com
-ARBITRUM_RPC=https://arbitrum.publicnode.com
+MAINNET_RPC=
+POLYGON_RPC=
+OPTIMISM_RPC=
+ARBITRUM_RPC=
+SEPOLIA_RPC=
 
-# Test networks
-SEPOLIA_RPC="your Alchemy RPC url here"
-
-# =============================================================================
-# BLOCK EXPLORER API KEYS
-# =============================================================================
-# Etherscan family (supports multiple networks)
 ETHERSCAN_API_KEY=
-
-# Additional explorer APIs for multi-explorer verification
-POLYGONSCAN_KEY=
-OPT_ETHERSCAN_KEY=
-ARBISCAN_API_KEY=
-
-# =============================================================================
-# OPTIONAL: GAS & PRICE TRACKING
-# =============================================================================
-# CoinMarketCap API for gas price reporting
 CMC_API_KEY=
-
-# =============================================================================
-# VERIFICATION SETTINGS
-# =============================================================================
-# Enable automatic verification after deployment
-VERIFY=true
-
-# =============================================================================
-# FACTORY & REGISTRY CONFIGURATION
-# =============================================================================
-# Factory contract address (set after deployment)
-FACTORY_ADDRESS=
-
-# Registry contract address (set after deployment)  
-REGISTRY_ADDRESS=
-
-# Timelock address for governance (set after deployment)
-TIMELOCK_ADDRESS=
-
-# =============================================================================
-# TALLY INTEGRATION
-# =============================================================================
-# Tally API key for proposal management (optional)
-TALLY_API_KEY=
-
-# =============================================================================
-# DEBUGGING & DEVELOPMENT
-# =============================================================================
-# Enable debug logging
-DEBUG=false
-
-# Gas price settings (optional)
-GAS_PRICE=
-GAS_LIMIT=
 
 # Gas reporting
 REPORT_GAS=false
@@ -1087,6 +1539,7 @@ pnpm --dir packages/contracts add -D \
   typescript@~5.9.2 ts-node@~10.9.2 @types/node@^22 dotenv@^16 \
   typechain@^8.2.0 @typechain/ethers-v6@^0.4.0 @typechain/hardhat@^8.0.0 \
   hardhat-deploy@^0.11.29 hardhat-docgen@^1.0.0 \
+  @openzeppelin/hardhat-upgrades@^1.0.0 \
   chai@^4.3.6 @types/chai@^4.2.0
 
 # Runtime deps
@@ -1254,8 +1707,8 @@ bash setup.sh
 
 Fill envs:
 
-* `apps/dao-dapp/.env.local`: Enhanced frontend configuration including `VITE_WALLETCONNECT_ID`, RPCs, factory/registry addresses, Tally integration, and debugging options
-* `packages/contracts/.env.hardhat.local`: Enhanced DApp development configuration including `PRIVATE_KEY` or `MNEMONIC`, RPCs, multi-explorer API keys, factory/registry configuration, and Tally integration
+* `apps/dao-dapp/.env.local`: `VITE_WALLETCONNECT_ID`, RPCs
+* `packages/contracts/.env.hardhat.local`: `PRIVATE_KEY` or `MNEMONIC`, RPCs, `ETHERSCAN_API_KEY`, optional `CMC_API_KEY`
 
 Optional speedups:
 
@@ -1289,6 +1742,10 @@ pnpm contracts:verify:multi  # Try both Etherscan and Blockscout
 pnpm contracts:verify:stdjson # Use Standard JSON for complex contracts
 pnpm contracts:debug         # Debug deployment issues
 pnpm contracts:tally         # Generate Tally proposal calldata
+pnpm contracts:factory-proposal # Generate factory with registry proposals
+pnpm contracts:deploy-upgradeable # Deploy upgradeable contracts
+pnpm contracts:upgrade       # Upgrade existing contracts
+pnpm contracts:verify-upgradeable # Verify upgradeable contracts
 pnpm contracts:docs          # Generate documentation from NatSpec
 pnpm contracts:lint:natspec  # Lint NatSpec documentation
 ```
@@ -1301,10 +1758,11 @@ pnpm forge:fmt
 pnpm foundry:update
 ```
 
-## 3) Factory Pattern (Real-world tested)
+## 3) Factory Pattern with Registry Integration (Production-Ready)
 
-The setup includes a production-ready Factory contract:
+The setup includes two factory contracts:
 
+### **Basic Factory**
 ```solidity
 // packages/contracts/contracts/Factory.sol
 contract Factory {
@@ -1321,17 +1779,105 @@ contract Factory {
 }
 ```
 
-Deploy via Factory:
-
-```bash
-# Get initcode for your contract
-pnpm contracts:compile
-
-# Deploy via factory (using Tally)
-pnpm contracts:tally <factory-address> deploy <initcode>
+### **Factory with Registry Integration** ⭐
+```solidity
+// packages/contracts/contracts/FactoryWithRegistry.sol
+contract FactoryWithRegistry {
+    function deployAndRegister(
+        bytes calldata initcode,
+        address registry,
+        bytes32 kind,
+        bytes32 salt,
+        uint64 version,
+        string calldata label,
+        string calldata uri
+    ) external payable returns (address addr, bytes32 registryId) {
+        // Deploy + Register in single transaction
+    }
+    
+    function deployCreate2AndRegister(...) external payable returns (address, bytes32) {
+        // CREATE2 + Register for deterministic addresses
+    }
+}
 ```
 
-## 4) Multi-Explorer Verification
+### **Deploy Factory System**
+
+```bash
+# Deploy all factory components
+pnpm contracts:deploy --tags FactorySystem
+
+# Deploy individual components
+pnpm contracts:deploy --tags Factory
+pnpm contracts:deploy --tags ContractRegistry
+```
+
+### **Generate Tally Proposals**
+
+```bash
+# Basic factory deployment
+pnpm contracts:tally <factory-address> deploy <initcode>
+
+# Factory with registry (recommended)
+pnpm contracts:factory-proposal <factory-address> <registry-address> <initcode> TOKEN "MyToken" "https://example.com"
+```
+
+## 4) OpenZeppelin Upgrade Plugins (Included)
+
+The setup includes OpenZeppelin upgradeable contracts and plugins for proxy patterns by default:
+
+### **Deploy Upgradeable System**
+```bash
+# Deploy all upgradeable components
+pnpm contracts:deploy --tags UpgradeableSystem
+
+# Deploy individual upgradeable contracts
+pnpm contracts:deploy-upgradeable
+```
+
+### **Upgradeable Contract Example**
+```solidity
+// packages/contracts/contracts/UpgradeableToken.sol
+contract UpgradeableToken is ERC20Upgradeable, OwnableUpgradeable, UUPSUpgradeable {
+    function initialize(address owner, address treasury) public initializer {
+        __ERC20_init("UpgradeableToken", "UPT");
+        __Ownable_init(owner);
+        __UUPSUpgradeable_init();
+    }
+    
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        // Authorization logic
+    }
+}
+```
+
+### **Deploy Upgradeable Contracts**
+```typescript
+// scripts/deploy-upgradeable.ts
+import { ethers, upgrades } from "hardhat";
+
+async function main() {
+  const UpgradeableToken = await ethers.getContractFactory("UpgradeableToken");
+  const token = await upgrades.deployProxy(UpgradeableToken, [owner, treasury]);
+  await token.waitForDeployment();
+  
+  console.log("UpgradeableToken deployed to:", await token.getAddress());
+}
+```
+
+### **Upgrade Contracts**
+```typescript
+// scripts/upgrade.ts
+import { ethers, upgrades } from "hardhat";
+
+async function main() {
+  const UpgradeableTokenV2 = await ethers.getContractFactory("UpgradeableTokenV2");
+  const upgraded = await upgrades.upgradeProxy(proxyAddress, UpgradeableTokenV2);
+  console.log("Contract upgraded!");
+}
+```
+
+## 5) Multi-Explorer Verification
 
 Handle verification issues with multiple strategies:
 

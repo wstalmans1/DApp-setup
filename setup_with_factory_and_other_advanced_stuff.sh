@@ -48,7 +48,7 @@ set -euo pipefail
 
 # -----------------------------------------------------------------------------
 # setup.sh — Rookie-proof DApp bootstrap (Hardhat **v2** lane)
-# Frontend: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v4
+# Frontend: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v3
 # Contracts: Hardhat v2 + @nomicfoundation/hardhat-toolbox (ethers v6) + TypeChain
 #            + hardhat-deploy + gas-reporter + contract-sizer + docgen + OpenZeppelin
 # DX: Foundry (Forge/Anvil), ESLint/Prettier/Solhint, Husky + lint-staged, CI
@@ -150,16 +150,39 @@ pnpm --dir apps/dao-dapp add react@18.3.1 react-dom@18.3.1
 pnpm --dir apps/dao-dapp add -D @types/react@18.3.12 @types/react-dom@18.3.1
 
 # Web3 + data
-pnpm --dir apps/dao-dapp add @rainbow-me/rainbowkit@~2.2.8 wagmi@~2.16.9 viem@~2.37.6 @tanstack/react-query@~5.90.2
-pnpm --dir apps/dao-dapp add @tanstack/react-query-devtools@~5.90.2 zod@~3.22.0
+pnpm --dir apps/dao-dapp add @rainbow-me/rainbowkit@^2.2.8 wagmi@^2.16.9 viem@^2.37.6 @tanstack/react-query@^5.90.2
+pnpm --dir apps/dao-dapp add @tanstack/react-query-devtools@^5.90.2 zod@^3.22.0
 
-# Tailwind v4
-pnpm --dir apps/dao-dapp add -D tailwindcss@~4.0.0 @tailwindcss/postcss@~4.0.0 postcss@~8.4.47
+# Tailwind v3 (stable)
+pnpm --dir apps/dao-dapp add -D tailwindcss@^3.4.0 postcss@^8.4.47 autoprefixer@^10.4.20
 cat > apps/dao-dapp/postcss.config.mjs <<'EOF'
-export default { plugins: { '@tailwindcss/postcss': {} } }
+export default { 
+  plugins: { 
+    tailwindcss: {},
+    autoprefixer: {}
+  } 
+}
 EOF
 mkdir -p apps/dao-dapp/src
-echo '@import "tailwindcss";' > apps/dao-dapp/src/index.css
+cat > apps/dao-dapp/src/index.css <<'EOF'
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+EOF
+
+cat > apps/dao-dapp/tailwind.config.js <<'EOF'
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+EOF
 
 # Artifacts dir for frontend
 mkdir -p apps/dao-dapp/src/contracts
@@ -294,8 +317,6 @@ import type { HardhatUserConfig } from 'hardhat/config'
 import '@nomicfoundation/hardhat-toolbox'
 import '@typechain/hardhat'
 import 'hardhat-deploy'
-import 'hardhat-gas-reporter'
-import 'hardhat-contract-sizer'
 import 'hardhat-docgen'
 
 loadEnv({ path: resolve(__dirname, '.env.hardhat.local') })
@@ -329,8 +350,13 @@ const config: HardhatUserConfig = {
     ...(process.env.ARBITRUM_RPC ? { arbitrum: { url: process.env.ARBITRUM_RPC!, accounts } } : {})
   },
   namedAccounts: { deployer: { default: 0 } },
-  gasReporter: { enabled: true, currency: 'USD' },
-  contractSizer: { runOnCompile: true },
+  gasReporter: { 
+    enabled: process.env.REPORT_GAS === 'true',
+    currency: 'USD',
+    coinmarketcap: process.env.CMC_API_KEY,
+    token: 'ETH',
+    gasPrice: 20
+  },
   docgen: { 
     outputDir: './docs', 
     pages: 'items', 
@@ -772,7 +798,7 @@ describe("Factory", function () {
     const factory = await Factory.deploy();
     await factory.waitForDeployment();
     
-    await expect(factory.deploy("0x")).to.be.revertedWithCustomError(factory, "EmptyInitcode");
+    await expect(factory.deploy("0x")).to.be.revertedWith("EmptyInitcode()");
   });
 });
 EOF
@@ -826,7 +852,7 @@ describe("ContractRegistry", function () {
     };
     
     await expect(registry.register(registration))
-      .to.be.revertedWithCustomError(registry, "AccessControlUnauthorizedAccount");
+      .to.be.revertedWith("AccessControl: account");
   });
 });
 EOF
@@ -844,6 +870,9 @@ SEPOLIA_RPC=
 
 ETHERSCAN_API_KEY=
 CMC_API_KEY=
+
+# Gas reporting
+REPORT_GAS=false
 EOF
 cp -f packages/contracts/.env.hardhat.example packages/contracts/.env.hardhat.local
 
@@ -852,11 +881,12 @@ pnpm --dir packages/contracts add -D \
   hardhat@^2.22.10 \
   @nomicfoundation/hardhat-toolbox@^4.0.0 \
   typescript@~5.9.2 ts-node@~10.9.2 @types/node@^22 dotenv@^16 \
-  typechain @typechain/ethers-v6 @typechain/hardhat \
-  hardhat-deploy hardhat-gas-reporter hardhat-contract-sizer hardhat-docgen
+  typechain@^8.2.0 @typechain/ethers-v6@^0.4.0 @typechain/hardhat@^8.0.0 \
+  hardhat-deploy@^0.11.29 hardhat-docgen@^1.0.0 \
+  chai@^4.3.6 @types/chai@^4.2.0
 
 # Runtime deps
-pnpm --dir packages/contracts add @openzeppelin/contracts @openzeppelin/contracts-upgradeable
+pnpm --dir packages/contracts add @openzeppelin/contracts@^5.0.0 @openzeppelin/contracts-upgradeable@^5.0.0
 
 # Install workspace lock
 pnpm install
@@ -1007,7 +1037,7 @@ EOF
 cat > README.md <<'EOF'
 # DApp Setup (Rookie-friendly)
 
-**Frontend**: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v4  
+**Frontend**: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v3  
 **Contracts**: Hardhat v2 + @nomicfoundation/hardhat-toolbox (ethers v6), OpenZeppelin, TypeChain, hardhat-deploy  
 **DX**: Foundry (Forge/Anvil), gas-reporter, contract-sizer, docgen, Solhint/Prettier, Husky  
 **Documentation**: Comprehensive NatSpec support with linting, validation, and auto-generation  

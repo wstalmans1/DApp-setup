@@ -208,6 +208,44 @@ export const config = getDefaultConfig({
   },
   ssr: false
 })
+
+// Enhanced configuration for factory patterns and multi-explorer support
+export const enhancedConfig = {
+  // Chain configuration
+  chainId: import.meta.env.VITE_CHAIN_ID ? parseInt(import.meta.env.VITE_CHAIN_ID) : 11155111,
+  
+  // Factory and Registry contracts
+  factory: {
+    address: import.meta.env.VITE_FACTORY_ADDRESS,
+    chainId: import.meta.env.VITE_FACTORY_CHAIN_ID ? parseInt(import.meta.env.VITE_FACTORY_CHAIN_ID) : 11155111,
+    chainName: import.meta.env.VITE_FACTORY_CHAIN_NAME || 'Sepolia'
+  },
+  registry: {
+    address: import.meta.env.VITE_REGISTRY_ADDRESS,
+    chainId: import.meta.env.VITE_REGISTRY_CHAIN_ID ? parseInt(import.meta.env.VITE_REGISTRY_CHAIN_ID) : 11155111
+  },
+  
+  // Block explorers
+  explorers: {
+    primary: import.meta.env.VITE_BLOCK_EXPLORER_URL || 'https://sepolia.etherscan.io',
+    secondary: import.meta.env.VITE_BLOCKSCOUT_URL || 'https://eth-sepolia.blockscout.com'
+  },
+  
+  // Tally integration
+  tally: {
+    apiUrl: import.meta.env.VITE_TALLY_API_URL || 'https://api.tally.xyz',
+    apiKey: import.meta.env.VITE_TALLY_API_KEY
+  },
+  
+  // Alchemy integration
+  alchemy: {
+    apiKey: import.meta.env.VITE_ALCHEMY_API_KEY
+  },
+  
+  // Debug settings
+  debug: import.meta.env.VITE_DEBUG === 'true',
+  verboseLogging: import.meta.env.VITE_VERBOSE_LOGGING === 'true'
+}
 EOF
 
 # main.tsx
@@ -258,12 +296,73 @@ EOF
 
 # Env example
 cat > apps/dao-dapp/.env.example <<'EOF'
+# =============================================================================
+# ENHANCED Frontend Environment Variables
+# =============================================================================
+# This file supports the enhanced setup.sh with factory patterns, multi-explorer
+# verification, Tally integration, and comprehensive tooling.
+
+# =============================================================================
+# WALLET CONNECTION
+# =============================================================================
 VITE_WALLETCONNECT_ID=
+
+# =============================================================================
+# RPC ENDPOINTS (Frontend)
+# =============================================================================
 VITE_MAINNET_RPC=https://cloudflare-eth.com
 VITE_POLYGON_RPC=https://polygon-rpc.com
 VITE_OPTIMISM_RPC=https://optimism.publicnode.com
 VITE_ARBITRUM_RPC=https://arbitrum.publicnode.com
-VITE_SEPOLIA_RPC=https://rpc.sepolia.org
+VITE_SEPOLIA_RPC=
+
+# =============================================================================
+# ALCHEMY INTEGRATION
+# =============================================================================
+# Alchemy API key for frontend clients (used by Wagmi/Viem)
+VITE_ALCHEMY_API_KEY=
+
+# =============================================================================
+# CHAIN CONFIGURATION
+# =============================================================================
+VITE_CHAIN_ID=11155111
+
+# =============================================================================
+# FACTORY & REGISTRY CONTRACTS
+# =============================================================================
+# Factory contract configuration
+VITE_FACTORY_ADDRESS=0x0000000000000000000000000000000000000000
+VITE_FACTORY_CHAIN_ID=11155111
+VITE_FACTORY_CHAIN_NAME=Sepolia
+
+# Registry contract configuration
+VITE_REGISTRY_ADDRESS=0x0000000000000000000000000000000000000000
+VITE_REGISTRY_CHAIN_ID=11155111
+
+# =============================================================================
+# BLOCK EXPLORER CONFIGURATION
+# =============================================================================
+# Primary explorer (Etherscan)
+VITE_BLOCK_EXPLORER_URL=https://sepolia.etherscan.io
+
+# Secondary explorer (Blockscout) for multi-explorer support
+VITE_BLOCKSCOUT_URL=https://eth-sepolia.blockscout.com
+
+# =============================================================================
+# TALLY INTEGRATION
+# =============================================================================
+# Tally configuration for governance
+VITE_TALLY_API_URL=https://api.tally.xyz
+VITE_TALLY_API_KEY=
+
+# =============================================================================
+# DEBUGGING & DEVELOPMENT
+# =============================================================================
+# Enable debug mode
+VITE_DEBUG=false
+
+# Enable verbose logging
+VITE_VERBOSE_LOGGING=false
 EOF
 cp -f apps/dao-dapp/.env.example apps/dao-dapp/.env.local
 
@@ -325,6 +424,12 @@ const privateKey = process.env.PRIVATE_KEY?.trim()
 const mnemonic = process.env.MNEMONIC?.trim()
 const accounts: any = privateKey ? [privateKey] : mnemonic ? { mnemonic } : undefined
 
+// Enhanced configuration from environment variables
+const verify = process.env.VERIFY === 'true'
+const debug = process.env.DEBUG === 'true'
+const gasPrice = process.env.GAS_PRICE ? parseInt(process.env.GAS_PRICE) : undefined
+const gasLimit = process.env.GAS_LIMIT ? parseInt(process.env.GAS_LIMIT) : undefined
+
 const config: HardhatUserConfig = {
   solidity: { 
     version: '0.8.28', 
@@ -343,11 +448,46 @@ const config: HardhatUserConfig = {
   defaultNetwork: 'hardhat',
   networks: {
     hardhat: {},
-    ...(process.env.SEPOLIA_RPC ? { sepolia: { url: process.env.SEPOLIA_RPC!, accounts } } : {}),
-    ...(process.env.MAINNET_RPC ? { mainnet: { url: process.env.MAINNET_RPC!, accounts } } : {}),
-    ...(process.env.POLYGON_RPC ? { polygon: { url: process.env.POLYGON_RPC!, accounts } } : {}),
-    ...(process.env.OPTIMISM_RPC ? { optimism: { url: process.env.OPTIMISM_RPC!, accounts } } : {}),
-    ...(process.env.ARBITRUM_RPC ? { arbitrum: { url: process.env.ARBITRUM_RPC!, accounts } } : {})
+    ...(process.env.SEPOLIA_RPC ? { 
+      sepolia: { 
+        url: process.env.SEPOLIA_RPC!, 
+        accounts,
+        ...(gasPrice && { gasPrice }),
+        ...(gasLimit && { gasLimit })
+      } 
+    } : {}),
+    ...(process.env.MAINNET_RPC ? { 
+      mainnet: { 
+        url: process.env.MAINNET_RPC!, 
+        accounts,
+        ...(gasPrice && { gasPrice }),
+        ...(gasLimit && { gasLimit })
+      } 
+    } : {}),
+    ...(process.env.POLYGON_RPC ? { 
+      polygon: { 
+        url: process.env.POLYGON_RPC!, 
+        accounts,
+        ...(gasPrice && { gasPrice }),
+        ...(gasLimit && { gasLimit })
+      } 
+    } : {}),
+    ...(process.env.OPTIMISM_RPC ? { 
+      optimism: { 
+        url: process.env.OPTIMISM_RPC!, 
+        accounts,
+        ...(gasPrice && { gasPrice }),
+        ...(gasLimit && { gasLimit })
+      } 
+    } : {}),
+    ...(process.env.ARBITRUM_RPC ? { 
+      arbitrum: { 
+        url: process.env.ARBITRUM_RPC!, 
+        accounts,
+        ...(gasPrice && { gasPrice }),
+        ...(gasLimit && { gasLimit })
+      } 
+    } : {})
   },
   namedAccounts: { deployer: { default: 0 } },
   gasReporter: { 
@@ -355,7 +495,7 @@ const config: HardhatUserConfig = {
     currency: 'USD',
     coinmarketcap: process.env.CMC_API_KEY,
     token: 'ETH',
-    gasPrice: 20
+    gasPrice: process.env.GAS_PRICE ? parseInt(process.env.GAS_PRICE) : 20
   },
   docgen: { 
     outputDir: './docs', 
@@ -859,17 +999,81 @@ EOF
 
 # .env for contracts
 cat > packages/contracts/.env.hardhat.example <<'EOF'
+# =============================================================================
+# ENHANCED DApp Development Environment Variables
+# =============================================================================
+# This file supports the enhanced setup.sh with factory patterns, multi-explorer
+# verification, Tally integration, and comprehensive tooling.
+
+# =============================================================================
+# DEPLOYMENT CREDENTIALS
+# =============================================================================
+# Private key or mnemonic for deployments (set one of the two)
 PRIVATE_KEY=
 MNEMONIC=
 
-MAINNET_RPC=
-POLYGON_RPC=
-OPTIMISM_RPC=
-ARBITRUM_RPC=
-SEPOLIA_RPC=
+# =============================================================================
+# RPC ENDPOINTS (HTTPS)
+# =============================================================================
+# Main networks
+MAINNET_RPC=https://cloudflare-eth.com
+POLYGON_RPC=https://polygon-rpc.com
+OPTIMISM_RPC=https://optimism.publicnode.com
+ARBITRUM_RPC=https://arbitrum.publicnode.com
 
+# Test networks
+SEPOLIA_RPC="your Alchemy RPC url here"
+
+# =============================================================================
+# BLOCK EXPLORER API KEYS
+# =============================================================================
+# Etherscan family (supports multiple networks)
 ETHERSCAN_API_KEY=
+
+# Additional explorer APIs for multi-explorer verification
+POLYGONSCAN_KEY=
+OPT_ETHERSCAN_KEY=
+ARBISCAN_API_KEY=
+
+# =============================================================================
+# OPTIONAL: GAS & PRICE TRACKING
+# =============================================================================
+# CoinMarketCap API for gas price reporting
 CMC_API_KEY=
+
+# =============================================================================
+# VERIFICATION SETTINGS
+# =============================================================================
+# Enable automatic verification after deployment
+VERIFY=true
+
+# =============================================================================
+# FACTORY & REGISTRY CONFIGURATION
+# =============================================================================
+# Factory contract address (set after deployment)
+FACTORY_ADDRESS=
+
+# Registry contract address (set after deployment)  
+REGISTRY_ADDRESS=
+
+# Timelock address for governance (set after deployment)
+TIMELOCK_ADDRESS=
+
+# =============================================================================
+# TALLY INTEGRATION
+# =============================================================================
+# Tally API key for proposal management (optional)
+TALLY_API_KEY=
+
+# =============================================================================
+# DEBUGGING & DEVELOPMENT
+# =============================================================================
+# Enable debug logging
+DEBUG=false
+
+# Gas price settings (optional)
+GAS_PRICE=
+GAS_LIMIT=
 
 # Gas reporting
 REPORT_GAS=false
@@ -1050,8 +1254,8 @@ bash setup.sh
 
 Fill envs:
 
-* `apps/dao-dapp/.env.local`: `VITE_WALLETCONNECT_ID`, RPCs
-* `packages/contracts/.env.hardhat.local`: `PRIVATE_KEY` or `MNEMONIC`, RPCs, `ETHERSCAN_API_KEY`, optional `CMC_API_KEY`
+* `apps/dao-dapp/.env.local`: Enhanced frontend configuration including `VITE_WALLETCONNECT_ID`, RPCs, factory/registry addresses, Tally integration, and debugging options
+* `packages/contracts/.env.hardhat.local`: Enhanced DApp development configuration including `PRIVATE_KEY` or `MNEMONIC`, RPCs, multi-explorer API keys, factory/registry configuration, and Tally integration
 
 Optional speedups:
 

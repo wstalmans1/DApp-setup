@@ -70,8 +70,14 @@ cat > package.json <<'EOF'
     "contracts:test": "pnpm --filter contracts run test",
     "contracts:deploy": "pnpm --filter contracts run deploy",
     "contracts:verify": "pnpm --filter contracts exec hardhat etherscan-verify",
+    "contracts:verify:multi": "pnpm --filter contracts exec ts-node scripts/verify-multi.ts",
+    "contracts:verify:stdjson": "pnpm --filter contracts exec ts-node scripts/verify-stdjson.ts",
     "contracts:docs": "pnpm --filter contracts run docs",
     "contracts:lint:natspec": "pnpm --filter contracts run lint:natspec",
+    "contracts:debug": "pnpm --filter contracts exec ts-node scripts/debug-deployment.ts",
+    "contracts:deploy-upgradeable": "pnpm --filter contracts exec ts-node scripts/deploy-upgradeable.ts",
+    "contracts:upgrade": "pnpm --filter contracts exec ts-node scripts/upgrade-contract.ts",
+    "contracts:verify-upgradeable": "pnpm --filter contracts exec ts-node scripts/verify-upgradeable.ts",
 
     "anvil:start": "anvil --block-time 1",
     "anvil:stop": "pkill -f '^anvil( |$)' || true",
@@ -250,6 +256,7 @@ import '@typechain/hardhat'
 import 'hardhat-deploy'
 import 'hardhat-gas-reporter'
 import 'hardhat-contract-sizer'
+import '@openzeppelin/hardhat-upgrades'
 
 loadEnv({ path: resolve(__dirname, '.env.hardhat.local') })
 
@@ -298,6 +305,8 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {},
     ...(process.env.SEPOLIA_RPC ? { sepolia: { url: process.env.SEPOLIA_RPC!, accounts } } : {}),
+    // Optional alias network to use Blockscout endpoints for verification while reusing Sepolia RPC
+    ...(process.env.SEPOLIA_RPC ? { 'sepolia-blockscout': { url: process.env.SEPOLIA_RPC!, accounts } } : {}),
     ...(process.env.MAINNET_RPC ? { mainnet: { url: process.env.MAINNET_RPC!, accounts } } : {}),
     ...(process.env.POLYGON_RPC ? { polygon: { url: process.env.POLYGON_RPC!, accounts } } : {}),
     ...(process.env.OPTIMISM_RPC ? { optimism: { url: process.env.OPTIMISM_RPC!, accounts } } : {}),
@@ -318,7 +327,23 @@ const config: HardhatUserConfig = {
     cache: resolve(__dirname, 'cache'),
     artifacts: resolve(__dirname, '../../apps/dao-dapp/src/contracts')
   },
-  etherscan: { apiKey: process.env.ETHERSCAN_API_KEY || '' }
+  etherscan: {
+    apiKey: {
+      sepolia: process.env.ETHERSCAN_API_KEY || '',
+      // Blockscout generally ignores API keys; a placeholder keeps plugin happy
+      'sepolia-blockscout': 'dummy'
+    },
+    customChains: [
+      {
+        network: 'sepolia-blockscout',
+        chainId: 11155111,
+        urls: {
+          apiURL: 'https://eth-sepolia.blockscout.com/api',
+          browserURL: 'https://eth-sepolia.blockscout.com'
+        }
+      }
+    ]
+  }
 }
 export default config
 EOF
@@ -443,6 +468,156 @@ async function main() {
 main().catch((e) => { console.error(e); process.exitCode = 1 })
 EOF
 
+# Debug a deployed address (basic utilities)
+cat > packages/contracts/scripts/debug-deployment.ts <<'EOF'
+import { ethers } from "hardhat"
+
+async function main() {
+  const address = process.argv[2]
+  if (!address) throw new Error("Usage: ts-node scripts/debug-deployment.ts <address>")
+
+  const code = await ethers.provider.getCode(address)
+  const balance = await ethers.provider.getBalance(address)
+  console.log("Code size:", (code.length - 2) / 2, "bytes")
+  console.log("ETH balance:", ethers.formatEther(balance))
+}
+
+main().catch((e) => { console.error(e); process.exit(1) })
+EOF
+
+# Deploy an upgradeable proxy for UpgradeableToken (example)
+cat > packages/contracts/scripts/deploy-upgradeable.ts <<'EOF'
+import { ethers, upgrades } from "hardhat"
+
+async function main() {
+  const [owner] = await ethers.getSigners()
+  const treasury = owner.address
+
+  const Impl = await ethers.getContractFactory("UpgradeableToken")
+  const proxy = await upgrades.deployProxy(Impl, [owner.address, treasury])
+  await proxy.waitForDeployment()
+  console.log("Proxy deployed:", await proxy.getAddress())
+}
+
+main().catch((e) => { console.error(e); process.exit(1) })
+EOF
+
+# Upgrade an existing proxy to a new implementation
+cat > packages/contracts/scripts/upgrade-contract.ts <<'EOF'
+import { ethers, upgrades } from "hardhat"
+
+async function main() {
+  const proxyAddress = process.argv[2]
+  const newImplName = process.argv[3] || "UpgradeableTokenV2"
+  if (!proxyAddress) throw new Error("Usage: ts-node scripts/upgrade-contract.ts <proxyAddress> [ImplName]")
+
+  const NewImpl = await ethers.getContractFactory(newImplName)
+  const upgraded = await upgrades.upgradeProxy(proxyAddress, NewImpl)
+  console.log("Upgraded proxy at:", await upgraded.getAddress())
+}
+
+main().catch((e) => { console.error(e); process.exit(1) })
+EOF
+
+# Verify an upgradeable proxy + implementation on explorer
+cat > packages/contracts/scripts/verify-upgradeable.ts <<'EOF'
+import hre from "hardhat"
+
+async function main() {
+  const proxyAddress = process.argv[2]
+  if (!proxyAddress) throw new Error("Usage: ts-node scripts/verify-upgradeable.ts <proxyAddress>")
+
+  try {
+    await hre.run("verify:verify", { address: proxyAddress })
+    console.log("✅ Verified proxy address")
+  } catch (e: any) {
+    console.log("❌ Proxy verification failed:", e.message || e)
+  }
+}
+
+main().catch((e) => { console.error(e); process.exit(1) })
+EOF
+
+# Multi-explorer verification scripts
+cat > packages/contracts/scripts/verify-multi.ts <<'EOF'
+import hre from "hardhat"
+
+async function main() {
+  const address = process.argv[2]
+  if (!address) throw new Error("Usage: ts-node scripts/verify-multi.ts <address> [constructorArgsJson]")
+
+  const argsJson = process.argv[3]
+  const constructorArgs: any[] = argsJson ? JSON.parse(argsJson) : []
+
+  console.log("Verifying on Etherscan…")
+  try {
+    await hre.run("verify:verify", { address, constructorArguments: constructorArgs })
+    console.log("✅ Etherscan verified")
+    return
+  } catch (e: any) {
+    console.log("❌ Etherscan failed:", e.message || e)
+  }
+
+  console.log("Verifying on Blockscout…")
+  try {
+    await hre.run("verify:verify", { address, network: "sepolia-blockscout", constructorArguments: constructorArgs })
+    console.log("✅ Blockscout verified")
+  } catch (e: any) {
+    console.log("❌ Blockscout failed:", e.message || e)
+  }
+}
+
+main().catch((e) => { console.error(e); process.exit(1) })
+EOF
+
+cat > packages/contracts/scripts/verify-stdjson.ts <<'EOF'
+import hre from "hardhat"
+import fs from "fs"
+
+async function main() {
+  const address = process.argv[2]
+  const stdJsonPath = process.argv[3]
+  const contractFullyQualifiedName = process.argv[4] // e.g. contracts/My.sol:My
+  if (!address || !stdJsonPath || !contractFullyQualifiedName) {
+    throw new Error("Usage: ts-node scripts/verify-stdjson.ts <address> <standardJsonPath> <FQN>")
+  }
+
+  const standardJsonInput = fs.readFileSync(stdJsonPath, "utf8")
+
+  // First try Etherscan (supports standard-json-input)
+  try {
+    await hre.run("verify:verify", {
+      address,
+      contract: contractFullyQualifiedName,
+      constructorArguments: [],
+      libraries: {},
+      standardJsonInput,
+    })
+    console.log("✅ Etherscan verified via standard JSON input")
+    return
+  } catch (e: any) {
+    console.log("❌ Etherscan failed:", e.message || e)
+  }
+
+  // Then try Blockscout; many instances also support standard-json-input
+  try {
+    await hre.run("verify:verify", {
+      address,
+      contract: contractFullyQualifiedName,
+      constructorArguments: [],
+      libraries: {},
+      standardJsonInput,
+      network: "sepolia-blockscout",
+    })
+    console.log("✅ Blockscout verified via standard JSON input")
+  } catch (e: any) {
+    console.log("❌ Blockscout failed:", e.message || e)
+  }
+}
+
+main().catch((e) => { console.error(e); process.exit(1) })
+EOF
+
 echo "// Add your tests here" > packages/contracts/test/.gitkeep
 
 # .env for contracts
@@ -467,7 +642,8 @@ pnpm --dir packages/contracts add -D \
   @nomicfoundation/hardhat-toolbox@^4.0.0 \
   typescript@~5.9.2 ts-node@~10.9.2 @types/node@^22 dotenv@^16 \
   typechain @typechain/ethers-v6 @typechain/hardhat \
-  hardhat-deploy hardhat-gas-reporter hardhat-contract-sizer solidity-docgen@0.6.0-beta.36
+  hardhat-deploy hardhat-gas-reporter hardhat-contract-sizer solidity-docgen@0.6.0-beta.36 \
+  @openzeppelin/hardhat-upgrades
 
 # Runtime deps
 pnpm --dir packages/contracts add @openzeppelin/contracts @openzeppelin/contracts-upgradeable
@@ -665,6 +841,12 @@ pnpm contracts:compile
 pnpm contracts:test
 pnpm contracts:deploy
 pnpm contracts:verify
+pnpm contracts:verify:multi   # Try both Etherscan and Blockscout
+pnpm contracts:verify:stdjson # Verify via standard JSON input
+pnpm contracts:debug          # Inspect code size and balance for an address
+pnpm contracts:deploy-upgradeable # Deploy an upgradeable proxy
+pnpm contracts:upgrade        # Upgrade an existing proxy
+pnpm contracts:verify-upgradeable # Verify upgradeable proxy/impl
 pnpm contracts:docs          # Generate Markdown docs from NatSpec (solidity-docgen)
 pnpm contracts:lint:natspec  # Lint NatSpec documentation
 ```

@@ -116,7 +116,34 @@ cat > apps/dao-dapp/postcss.config.mjs <<'EOF'
 export default { plugins: { '@tailwindcss/postcss': {} } }
 EOF
 mkdir -p apps/dao-dapp/src
-echo '@import "tailwindcss";' > apps/dao-dapp/src/index.css
+cat > apps/dao-dapp/src/index.css <<'EOF'
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+  background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.08), transparent 30%),
+    radial-gradient(circle at 80% 0%, rgba(99, 102, 241, 0.08), transparent 25%),
+    #0b1221;
+  color: #e5e7eb;
+}
+
+a {
+  color: #93c5fd;
+}
+a:hover {
+  color: #bfdbfe;
+}
+EOF
 
 # Artifacts dir for frontend
 mkdir -p apps/dao-dapp/src/contracts
@@ -180,11 +207,36 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 
 export default function App() {
   return (
-    <div className="min-h-screen p-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">DAO dApp</h1>
-        <ConnectButton />
-      </header>
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-slate-950 to-indigo-500/10" aria-hidden />
+      <div className="relative mx-auto flex max-w-5xl flex-col gap-10 px-6 py-10">
+        <header className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/5 px-6 py-4 backdrop-blur">
+          <div>
+            <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Starter</p>
+            <h1 className="text-2xl font-semibold text-white">DAO dApp</h1>
+          </div>
+          <ConnectButton />
+        </header>
+
+        <main className="grid gap-6 md:grid-cols-2">
+          <section className="rounded-2xl border border-white/5 bg-white/5 p-6 backdrop-blur">
+            <h2 className="text-lg font-semibold text-white">Ready to build</h2>
+            <p className="mt-3 text-sm text-slate-300">
+              You have wagmi, RainbowKit, viem, and Tailwind pre-wired. Update the contracts and ABI
+              exports, then hook your UI into the deployed addresses.
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-white/5 bg-white/5 p-6 backdrop-blur">
+            <h2 className="text-lg font-semibold text-white">Local workflow</h2>
+            <ul className="mt-3 space-y-2 text-sm text-slate-300">
+              <li>pnpm web:dev — frontend dev server</li>
+              <li>pnpm anvil:start — local chain</li>
+              <li>pnpm contracts:compile — Hardhat artifacts exported to the app</li>
+            </ul>
+          </section>
+        </main>
+      </div>
     </div>
   )
 }
@@ -765,32 +817,115 @@ EOF
 # --- CI ----------------------------------------------------------------------
 cat > .github/workflows/ci.yml <<'EOF'
 name: CI
+
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [main]
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10.16.1"
+
 jobs:
-  build-and-test:
+  lint-test-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'pnpm'
-      - run: corepack enable
-      - run: corepack prepare pnpm@10.16.1 --activate
-      - run: pnpm install
-      - run: pnpm contracts:compile
-      - run: pnpm --filter contracts test
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Use pnpm ${{ env.PNPM_VERSION }}
+        run: corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Lint frontend
+        run: pnpm dlx eslint apps/dao-dapp --ext .ts,.tsx
+
+      - name: Build frontend
+        run: pnpm web:build
+
+      - name: Compile contracts (Hardhat)
+        run: pnpm contracts:compile
+
+      - name: Hardhat tests
+        run: pnpm --filter contracts test
+
       - name: Foundry tests
         run: |
           curl -L https://foundry.paradigm.xyz | bash
           ~/.foundry/bin/foundryup
           forge test -vvv
         working-directory: packages/contracts
-      - run: pnpm dlx eslint apps/dao-dapp --ext .ts,.tsx
-      - run: pnpm --filter contracts exec solhint 'contracts/**/*.sol' || true
+
+      - name: Solhint (non-blocking)
+        run: pnpm --filter contracts exec solhint 'contracts/**/*.sol' || true
+EOF
+
+# --- Deploy to Fleek (IPFS) --------------------------------------------------
+cat > .github/workflows/deploy-fleek.yml <<'EOF'
+name: Deploy (Fleek IPFS)
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10.16.1"
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_commit.id || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Use pnpm ${{ env.PNPM_VERSION }}
+        run: corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Build frontend
+        run: pnpm web:build
+
+      - name: Ensure Fleek config exists
+        run: |
+          test -f apps/dao-dapp/.fleek.json || {
+            echo "::error::Missing apps/dao-dapp/.fleek.json. Run 'pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init' inside apps/dao-dapp and commit the file."
+            exit 1
+          }
+
+      - name: Deploy to Fleek (IPFS)
+        uses: FleekHQ/action-deploy@v1
+        with:
+          apiKey: ${{ secrets.FLEEK_API_KEY }}
+          workDir: apps/dao-dapp
+          commitHash: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_commit.id || github.sha }}
 EOF
 
 # --- README ------------------------------------------------------------------
@@ -819,6 +954,13 @@ Optional speedups:
 pnpm approve-builds
 # select: bufferutil, utf-8-validate, keccak, secp256k1
 ```
+
+## CI & deployment
+
+- `.github/workflows/ci.yml` runs on PRs and pushes to `main`: pnpm install, frontend lint + build, Hardhat compile/test, Foundry tests, and a non-blocking Solhint pass.
+- `.github/workflows/deploy-fleek.yml` triggers after CI succeeds on `main` (or manually via `workflow_dispatch`); it rebuilds `apps/dao-dapp` and ships the `dist` folder to IPFS via `FleekHQ/action-deploy@v1`.
+- Add `FLEEK_API_KEY` as a GitHub secret (scoped deploy key from Fleek dashboard). No Fleek secrets are stored in the repo.
+- Generate `apps/dao-dapp/.fleek.json` by running `pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init` inside that folder and committing the file. Keep the publish directory set to `dist` (or adjust the workflow if you change it).
 
 ## 2) Everyday commands
 
@@ -942,3 +1084,4 @@ echo "1) Edit apps/dao-dapp/.env.local"
 echo "2) Edit packages/contracts/.env.hardhat.local"
 echo "3) pnpm contracts\:compile"
 echo "4) pnpm web\:dev"
+echo "5) (Deploy) In apps/dao-dapp run: pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init, commit .fleek.json, add FLEEK_API_KEY to GitHub secrets"

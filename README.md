@@ -37,6 +37,13 @@ pnpm approve-builds
 # select: bufferutil, utf-8-validate, keccak, secp256k1
 ```
 
+## CI & deployment
+
+- `.github/workflows/ci.yml` runs on PRs and pushes to `main`: pnpm install, frontend lint + build, Hardhat compile/test, Foundry tests, and a non-blocking Solhint pass.
+- `.github/workflows/deploy-fleek.yml` triggers after CI succeeds on `main` (or manually via `workflow_dispatch`); it rebuilds `apps/dao-dapp` and ships the `dist` folder to IPFS via `FleekHQ/action-deploy@v1`.
+- Add `FLEEK_API_KEY` as a GitHub secret (scoped deploy key from Fleek dashboard). No Fleek secrets are stored in the repo.
+- Generate `apps/dao-dapp/.fleek.json` by running `pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init` inside that folder and committing the file. Keep the publish directory set to `dist` (or adjust the workflow if you change it).
+
 ---
 
 ## 2) Everyday commands

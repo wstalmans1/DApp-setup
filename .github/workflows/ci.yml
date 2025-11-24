@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10.16.1"
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Use pnpm ${{ env.PNPM_VERSION }}
+        run: corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Lint frontend
+        run: pnpm dlx eslint apps/dao-dapp --ext .ts,.tsx
+
+      - name: Build frontend
+        run: pnpm web:build
+
+      - name: Compile contracts (Hardhat)
+        run: pnpm contracts:compile
+
+      - name: Hardhat tests
+        run: pnpm --filter contracts test
+
+      - name: Foundry tests
+        run: |
+          curl -L https://foundry.paradigm.xyz | bash
+          ~/.foundry/bin/foundryup
+          forge test -vvv
+        working-directory: packages/contracts
+
+      - name: Solhint (non-blocking)
+        run: pnpm --filter contracts exec solhint 'contracts/**/*.sol' || true

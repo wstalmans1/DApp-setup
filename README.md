@@ -43,6 +43,17 @@ pnpm approve-builds
 - `.github/workflows/deploy-fleek.yml` triggers after CI succeeds on `main` (or manually via `workflow_dispatch`); it rebuilds `apps/dao-dapp` and ships the `dist` folder to IPFS via `FleekHQ/action-deploy@v1`.
 - Add `FLEEK_API_KEY` as a GitHub secret (scoped deploy key from Fleek dashboard). No Fleek secrets are stored in the repo.
 - Generate `apps/dao-dapp/.fleek.json` by running `pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init` inside that folder and committing the file. Keep the publish directory set to `dist` (or adjust the workflow if you change it).
+- Use Fleek build command: `HUSKY=0 corepack enable && corepack prepare pnpm@10.16.1 --activate && pnpm install --frozen-lockfile=false && pnpm web:build`
+- Publish directory in Fleek: `apps/dao-dapp/dist` (set this when linking the GitHub repo in Fleek UI)
+- Add frontend env vars (VITE_WALLETCONNECT_ID, RPC URLs, etc.) in Fleek → Site → Environment variables (same values as your local `.env.local`; do not add `FLEEK_API_KEY` there).
+
+### Rookie checklist (post-setup)
+1. Fill `apps/dao-dapp/.env.local` (WalletConnect ID + RPC URLs).
+2. (Optional) Fill `packages/contracts/.env.hardhat.local` if you will deploy contracts.
+3. In `apps/dao-dapp`: `set -a; source .env.local; set +a; pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init` → commit the generated `.fleek.json`.
+4. Push to GitHub; add repo secret `FLEEK_API_KEY`.
+5. In Fleek UI: set build command above, publish dir `apps/dao-dapp/dist`, add frontend env vars, then Deploy.
+6. Future deploys happen automatically on pushes to `main` (CI → deploy workflow) or manually from Fleek.
 
 ---
 

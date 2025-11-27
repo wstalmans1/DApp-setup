@@ -157,7 +157,7 @@ import { mainnet, polygon, optimism, arbitrum, sepolia } from 'wagmi/chains'
 import { http } from 'wagmi'
 
 export const config = getDefaultConfig({
-  appName: 'DAO dApp',
+  appName: 'DAO DApp',
   projectId: import.meta.env.VITE_WALLETCONNECT_ID!,
   chains: [mainnet, polygon, optimism, arbitrum, sepolia],
   transports: {
@@ -209,33 +209,14 @@ export default function App() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
       <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-slate-950 to-indigo-500/10" aria-hidden />
-      <div className="relative mx-auto flex max-w-5xl flex-col gap-10 px-6 py-10">
+      <div className="relative flex w-full flex-col gap-10 px-6 py-10">
         <header className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/5 px-6 py-4 backdrop-blur">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Starter</p>
-            <h1 className="text-2xl font-semibold text-white">DAO dApp</h1>
+            <h1 className="text-2xl font-semibold text-white">DAO DApp</h1>
           </div>
           <ConnectButton />
         </header>
-
-        <main className="grid gap-6 md:grid-cols-2">
-          <section className="rounded-2xl border border-white/5 bg-white/5 p-6 backdrop-blur">
-            <h2 className="text-lg font-semibold text-white">Ready to build</h2>
-            <p className="mt-3 text-sm text-slate-300">
-              You have wagmi, RainbowKit, viem, and Tailwind pre-wired. Update the contracts and ABI
-              exports, then hook your UI into the deployed addresses.
-            </p>
-          </section>
-
-          <section className="rounded-2xl border border-white/5 bg-white/5 p-6 backdrop-blur">
-            <h2 className="text-lg font-semibold text-white">Local workflow</h2>
-            <ul className="mt-3 space-y-2 text-sm text-slate-300">
-              <li>pnpm web:dev — frontend dev server</li>
-              <li>pnpm anvil:start — local chain</li>
-              <li>pnpm contracts:compile — Hardhat artifacts exported to the app</li>
-            </ul>
-          </section>
-        </main>
       </div>
     </div>
   )
@@ -939,70 +920,125 @@ cat > README.md <<'EOF'
 **CI**: GitHub Actions
 
 ## 1) First-time setup
+
+Run the setup script:
 ```bash
 bash setup.sh
 ```
 
-Fill envs:
+After setup completes, you'll need to configure your environment files:
 
-* `apps/dao-dapp/.env.local`: `VITE_WALLETCONNECT_ID`, RPCs
-* `packages/contracts/.env.hardhat.local`: `PRIVATE_KEY` or `MNEMONIC`, RPCs, `ETHERSCAN_API_KEY`, optional `CMC_API_KEY`
+**Step 1:** Edit `apps/dao-dapp/.env.local`
+- Add your `VITE_WALLETCONNECT_ID` (get one free from [WalletConnect Cloud](https://cloud.walletconnect.com))
+- Add RPC URLs for the networks you want to use (defaults are provided)
 
-Optional speedups:
+**Step 2:** Edit `packages/contracts/.env.hardhat.local`
+- Add your `PRIVATE_KEY` or `MNEMONIC` (for deploying contracts)
+- Add RPC URLs for networks (Sepolia, Mainnet, etc.)
+- Add `ETHERSCAN_API_KEY` (get one free from [Etherscan](https://etherscan.io/apis))
+- Optionally add `CMC_API_KEY` for gas price reporting
 
+**Optional speedup:** If you want faster builds, run:
 ```bash
 pnpm approve-builds
-# select: bufferutil, utf-8-validate, keccak, secp256k1
+# Then select: bufferutil, utf-8-validate, keccak, secp256k1
 ```
 
 ## CI & deployment
 
-- `.github/workflows/ci.yml` runs on PRs and pushes to `main`: pnpm install, frontend lint + build, Hardhat compile/test, Foundry tests, and a non-blocking Solhint pass.
-- `.github/workflows/deploy-fleek.yml` triggers after CI succeeds on `main` (or manually via `workflow_dispatch`); it rebuilds `apps/dao-dapp` and ships the `dist` folder to IPFS via `FleekHQ/action-deploy@v1`.
-- Add `FLEEK_API_KEY` as a GitHub secret (scoped deploy key from Fleek dashboard). No Fleek secrets are stored in the repo.
-- Generate `apps/dao-dapp/.fleek.json` by running `pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init` inside that folder and committing the file. Keep the publish directory set to `dist` (or adjust the workflow if you change it).
+### Automated Testing (CI)
+When you push code or create a pull request, GitHub Actions automatically:
+- Installs all dependencies
+- Lints and builds your frontend
+- Compiles and tests your contracts (Hardhat)
+- Runs Foundry tests
+- Checks code quality with Solhint
+
+### Deploy Your App Online (Optional)
+
+Want to share your app with the world? Deploy it to IPFS using Fleek:
+
+**Step 1:** Go to your frontend folder
+```bash
+cd apps/dao-dapp
+```
+
+**Step 2:** Initialize Fleek
+```bash
+pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init
+```
+This creates a `.fleek.json` file - commit it to git.
+
+**Step 3:** Get your API key
+- Go to [Fleek Dashboard](https://app.fleek.co)
+- Create an account (free)
+- Get your API key from settings
+
+**Step 4:** Add it to GitHub Secrets
+- Go to your GitHub repo → Settings → Secrets and variables → Actions
+- Click "New repository secret"
+- Name: `FLEEK_API_KEY`
+- Value: paste your API key from Fleek
+
+**That's it!** Your app will automatically deploy to IPFS whenever you push to the `main` branch. The deployment happens after all tests pass successfully.
+
+> 💡 **Note:** No secrets are stored in your code - they're safely stored in GitHub Secrets.
 
 ## 2) Everyday commands
 
-Frontend:
+### Start Developing
 
+**Frontend (web app):**
 ```bash
 pnpm web:dev
 ```
+Opens your app at `http://localhost:5173` - it auto-refreshes when you make changes!
 
-Local chain:
-
+**Local blockchain (for testing):**
 ```bash
-pnpm anvil:start   # stop: pnpm anvil:stop
+pnpm anvil:start   # Start a local blockchain
+pnpm anvil:stop    # Stop it when you're done
+```
+This gives you a local Ethereum network to test your contracts without spending real money.
+
+### Working with Contracts
+
+**Basic workflow:**
+```bash
+pnpm contracts:compile  # Compile your contracts (creates ABIs for frontend)
+pnpm contracts:test     # Run tests
+pnpm contracts:deploy   # Deploy to your configured network
 ```
 
-Contracts (Hardhat):
-
+**Verify your contracts on block explorers:**
 ```bash
-pnpm contracts:compile
-pnpm contracts:test
-pnpm contracts:deploy
-pnpm contracts:verify
-pnpm contracts:verify:multi   # Try both Etherscan and Blockscout
-pnpm contracts:verify:stdjson # Verify via standard JSON input
-pnpm contracts:debug          # Inspect code size and balance for an address
-pnpm contracts:deploy-upgradeable # Deploy an upgradeable proxy
-pnpm contracts:upgrade        # Upgrade an existing proxy
-pnpm contracts:verify-upgradeable # Verify upgradeable proxy/impl
-pnpm contracts:docs          # Generate Markdown docs from NatSpec (solidity-docgen)
-pnpm contracts:lint:natspec  # Lint NatSpec documentation
+pnpm contracts:verify              # Verify on Etherscan
+pnpm contracts:verify:multi        # Try both Etherscan and Blockscout (if one fails)
+pnpm contracts:verify:stdjson      # Verify using standard JSON input (for complex contracts)
+pnpm contracts:verify-upgradeable  # Verify upgradeable proxy contracts
 ```
 
-Contracts (Foundry):
-
+**Advanced features:**
 ```bash
-pnpm forge:test
-pnpm forge:fmt
-pnpm foundry:update
+pnpm contracts:debug              # Check code size and balance for any address
+pnpm contracts:deploy-upgradeable # Deploy an upgradeable proxy contract
+pnpm contracts:upgrade            # Upgrade an existing proxy contract
+pnpm contracts:docs               # Generate documentation from your NatSpec comments
+pnpm contracts:lint:natspec       # Check that your documentation is complete
 ```
 
-## 3) Example contract (OpenZeppelin)
+**Foundry (alternative testing framework):**
+```bash
+pnpm forge:test       # Run Foundry tests
+pnpm forge:fmt        # Format your Solidity code
+pnpm foundry:update   # Update Foundry to latest version
+```
 
+## 3) Create Your First Contract
+
+Let's create a simple token contract to get you started!
+
+**Step 1:** Create the contract file
 Create `packages/contracts/contracts/MyToken.sol`:
 
 ```solidity
@@ -1014,7 +1050,8 @@ contract MyToken is ERC20 {
 }
 ```
 
-Deploy (create `packages/contracts/deploy/01_mytoken.ts`):
+**Step 2:** Create the deployment script
+Create `packages/contracts/deploy/01_mytoken.ts`:
 
 ```ts
 import type { DeployFunction } from 'hardhat-deploy/types'
@@ -1025,49 +1062,58 @@ const func: DeployFunction = async ({ deployments, getNamedAccounts }) => {
 export default func; func.tags = ['MyToken'];
 ```
 
-Run:
-
+**Step 3:** Compile and deploy
 ```bash
 pnpm contracts:compile
 pnpm --filter contracts exec hardhat deploy --network sepolia --tags MyToken
 ```
 
-Artifacts (ABIs) appear in `apps/dao-dapp/src/contracts/`.
+**What happens:**
+- Your contract compiles successfully ✅
+- It gets deployed to Sepolia testnet ✅
+- The ABI (Application Binary Interface) automatically appears in `apps/dao-dapp/src/contracts/` ✅
+- You can now use it in your frontend! 🎉
 
-## 4) NatSpec Documentation
+## 4) Documenting Your Contracts
 
-This setup includes comprehensive NatSpec support:
+Good documentation helps others (and future you!) understand your code. This setup makes it easy!
 
-### Features:
-- **NatSpec Linting**: Solhint rules enforce proper documentation format
-- **Docs on Demand**: Generate lightweight Markdown docs without Vue dependencies
-- **Auto-generation**: Docs refresh after each compile; set `DOCS_AUTOGEN=false` to skip
-- **Validation**: NatSpec comments are validated during development
-- **Formatting**: Prettier ensures consistent NatSpec formatting
+### What is NatSpec?
+NatSpec (Natural Language Specification) is a way to document your Solidity contracts using special comments. Think of it like JSDoc for JavaScript, but for smart contracts.
 
-### Commands:
+### How It Works
+
+**Automatic documentation:**
+- Every time you compile, documentation is automatically generated
+- It creates nice Markdown files in `packages/contracts/docs`
+- Want to skip auto-generation? Set `DOCS_AUTOGEN=false` in your environment
+
+**Manual commands:**
 ```bash
-pnpm contracts:docs          # Generate Markdown documentation into packages/contracts/docs
-pnpm contracts:lint:natspec  # Check NatSpec compliance
+pnpm contracts:docs          # Generate documentation right now
+pnpm contracts:lint:natspec  # Check that all your functions are documented
 ```
 
-### NatSpec Tags Supported:
-- `@title` - Contract/function title
-- `@notice` - User-facing description
-- `@dev` - Developer notes
-- `@param` - Parameter descriptions
-- `@return` - Return value descriptions
-- `@author` - Author information
-- `@custom:*` - Custom tags
+### NatSpec Tags You Can Use:
+- `@title` - Give your contract a title
+- `@notice` - Explain what your contract/function does (for users)
+- `@dev` - Technical details (for developers)
+- `@param` - Describe each parameter
+- `@return` - Explain what the function returns
+- `@author` - Your name or team
+- `@custom:*` - Any custom tags you want
 
-### Example:
-See `packages/contracts/contracts/ExampleToken.sol` for a comprehensive example.
+### See It In Action
+Check out `packages/contracts/contracts/ExampleToken.sol` - it has comprehensive NatSpec documentation showing you how it's done!
 
-Documentation is written to `packages/contracts/docs` after every compile unless `DOCS_AUTOGEN=false`, or on demand via `pnpm contracts:docs`.
+### Where Does It Go?
+- Documentation files are saved to `packages/contracts/docs`
+- They're generated automatically after each compile (unless disabled)
+- You can also generate them manually anytime with `pnpm contracts:docs`
 
-NatSpec comments are validated and formatted, ready for documentation generation with tools like:
-- `solidity-docgen` - Default Hardhat-integrated generator (Markdown)
-- `docusaurus` - Full documentation site generator
+The generated docs work great with tools like:
+- **solidity-docgen** - Creates Markdown docs (already included!)
+- **docusaurus** - Build a full documentation website
 EOF
 
 # --- Git init ----------------------------------------------------------------
@@ -1082,6 +1128,103 @@ ok "Setup complete."
 echo "Next:"
 echo "1) Edit apps/dao-dapp/.env.local"
 echo "2) Edit packages/contracts/.env.hardhat.local"
-echo "3) pnpm contracts\:compile"
-echo "4) pnpm web\:dev"
-echo "5) (Deploy) In apps/dao-dapp run: pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init, commit .fleek.json, add FLEEK_API_KEY to GitHub secrets"
+echo "3) To deploy the website locally, run \"pnpm web\:dev\" from the root directory"
+echo "4) To deploy the app online:"
+echo "   Step 1: Create a GitHub repository"
+echo "   - Go to https://github.com and sign in (or create a free account)"
+echo "   - Click the '+' icon in the top right corner → 'New repository'"
+echo "   - Name your repository (e.g., 'my-dao-dapp')"
+echo "   - Choose 'Public' or 'Private'"
+echo "   - DO NOT initialize with README, .gitignore, or license (we already have these)"
+echo "   - Click 'Create repository'"
+echo ""
+echo "   Step 2: Sync your project to GitHub"
+echo "   - In your terminal, make sure you're in the project root folder"
+echo "   - Check if git is initialized: git status"
+echo "   - If not initialized, run: git init"
+echo "   - Add your GitHub repo as remote: git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git"
+echo "     (Replace YOUR_USERNAME and YOUR_REPO_NAME with your actual GitHub username and repo name)"
+echo "   - Stage all files: git add -A"
+echo "   - Commit: git commit -m 'Initial commit'"
+echo "   - Push to GitHub: git push -u origin main"
+echo "   - Refresh your GitHub page - you should see all your files there!"
+echo ""
+echo "   Step 3: Set up Fleek and configure deployment"
+echo "   - Go to https://app.fleek.co and sign in (or create a free account)"
+echo "   - Click 'Create new - site'"
+echo "   - Select code location GitHub"
+echo "   - Authorize Fleek to access your GitHub account (click 'Authorize')"
+echo "   - Select your repository from the list and click 'Deploy'"
+echo "   - Select the 'main' branch (or your default branch name)"
+echo "   - On the same configuration page, you'll see these fields:"
+echo "     * 'Framework': Select 'Vite' from the dropdown (or 'Other' if Vite is not available)"
+echo "     * 'Branch': Should already show 'main' (or your default branch)"
+echo "     * 'Publish Directory': Enter apps/dao-dapp/dist"
+echo "     * 'Build Command': Enter corepack enable && corepack prepare pnpm@10.16.1 --activate && pnpm install --frozen-lockfile=false && pnpm web:build"
+echo "       (This enables Corepack, sets up pnpm, installs dependencies, then builds your app)"
+echo "       (The build creates the 'dist' folder that Fleek will deploy)"
+echo "     * Under advanced options,'Docker Image': Change from 'fleek/node:lts' to 'node:22'"
+echo "       (This ensures Node.js version 22 is used, which your project requires)"
+echo "       (If 'node:22' doesn't work, try 'fleek/node:22' or check Fleek docs for Node 22 image)"
+echo "     * 'Base Directory': Leave as './' (or click 'Select' and choose the project root)"
+echo "   - Scroll down to the 'Environment Variables' section (on the same page)"
+echo "   - IMPORTANT: Add these environment variables BEFORE clicking 'Deploy site'"
+echo "   - Click 'Add Variable' or '+' button for each variable"
+echo "   - Add these variables one by one (get values from your apps/dao-dapp/.env.local file):"
+echo "     * Name: VITE_WALLETCONNECT_ID"
+echo "       Value: (get one free from https://cloud.walletconnect.com - sign up and create a project)"
+echo "     * Name: VITE_MAINNET_RPC"
+echo "       Value: https://cloudflare-eth.com (or your custom RPC)"
+echo "     * Name: VITE_POLYGON_RPC"
+echo "       Value: https://polygon-rpc.com (or your custom RPC)"
+echo "     * Name: VITE_OPTIMISM_RPC"
+echo "       Value: https://optimism.publicnode.com (or your custom RPC)"
+echo "     * Name: VITE_ARBITRUM_RPC"
+echo "       Value: https://arbitrum.publicnode.com (or your custom RPC)"
+echo "     * Name: VITE_SEPOLIA_RPC"
+echo "       Value: https://rpc.sepolia.org (or your custom RPC)"
+echo "   - (If you see 'Hide advanced options', click it to see more fields if needed)"
+echo ""
+echo "   Step 4: Deploy manually (first time)"
+echo "   - Click 'Deploy Site' or 'Deploy' button at the bottom of the Fleek page"
+echo "   - Wait for the build to complete (you'll see progress in Fleek dashboard)"
+echo "   - Once done, you'll get a URL like: your-site.on.fleek.co"
+echo "   - Your app is now live! Share the URL with anyone 🌐"
+echo ""
+echo "   Troubleshooting: If deployment fails or website is blank:"
+echo "   - Go to your site in Fleek dashboard → 'Deployments' tab"
+echo "   - Click on the failed deployment to see details"
+echo "   - Click on 'Build Logs' step to see error messages"
+echo "   - Common issues and fixes:"
+echo "     * If website deploys but shows blank page:"
+echo "       → Go to Settings → Environment Variables"
+echo "       → Make sure all VITE_* variables are added (especially VITE_WALLETCONNECT_ID)"
+echo "       → Redeploy after adding missing variables"
+echo "     * If you see 'Unsupported engine' or wrong Node version:"
+echo "       → Go to Settings → Make sure 'Docker Image' is set to 'fleek/node:22' or 'node:22'"
+echo "     * If you see 'tsc: not found' or 'node_modules missing':"
+echo "       → Make sure 'Build Command' includes all steps: corepack enable && corepack prepare pnpm@10.16.1 --activate && pnpm install --frozen-lockfile=false && pnpm web:build"
+echo "     * If you see 'Dist directory does not exist' AFTER build completes:"
+echo "       → Check that 'Publish Directory' is exactly 'apps/dao-dapp/dist' (not just 'dist')"
+echo "       → Check that 'Base Directory' is './' (project root)"
+echo "       → The build command should CREATE the dist folder - if it doesn't exist, the build failed"
+echo "   - After fixing, click 'Redeploy' button to try again"
+echo ""
+echo "   Step 5: Set up automatic deployment via GitHub Actions (optional but recommended)"
+echo "   - This allows your app to auto-deploy when you push code to GitHub"
+echo "   - Go to https://app.fleek.co → Your site → Settings → API Keys"
+echo "   - Click 'Generate API Key' or copy your existing API key"
+echo "   - Go to your GitHub repository page"
+echo "   - Click 'Settings' tab (top menu)"
+echo "   - In the left sidebar, click 'Secrets and variables' → 'Actions'"
+echo "   - Click 'New repository secret' button"
+echo "   - Name: FLEEK_API_KEY"
+echo "   - Value: Paste the API key you copied from Fleek"
+echo "   - Click 'Add secret'"
+echo "   - Now go to your project folder in terminal"
+echo "   - Navigate to apps/dao-dapp: cd apps/dao-dapp"
+echo "   - Run: pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init"
+echo "   - This creates a .fleek.json file"
+echo "   - Go back to project root: cd ../.."
+echo "   - Commit and push: git add apps/dao-dapp/.fleek.json && git commit -m 'Add Fleek config' && git push"
+echo "   - Now every time you push to main branch, GitHub Actions will automatically deploy your app!"

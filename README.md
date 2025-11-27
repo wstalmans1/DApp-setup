@@ -11,49 +11,136 @@ This repo bootstraps a modern DApp workspace:
 
 ## 1) First-time setup
 
+Run the setup script:
 ```bash
-# Make a new folder, copy setup.sh, then:
 bash setup.sh
 ```
 
-Fill in env files:
+After setup completes, you'll need to configure your environment files:
 
-* `apps/dao-dapp/.env.local`
+**Step 1:** Edit `apps/dao-dapp/.env.local`
+- Add your `VITE_WALLETCONNECT_ID` (get one free from [WalletConnect Cloud](https://cloud.walletconnect.com))
+- Add RPC URLs for the networks you want to use (defaults are provided)
 
-  * `VITE_WALLETCONNECT_ID=...`
-  * RPC URLs (mainnet/polygon/optimism/arbitrum/sepolia)
+**Step 2:** Edit `packages/contracts/.env.hardhat.local`
+- Add your `PRIVATE_KEY` or `MNEMONIC` (for deploying contracts)
+- Add RPC URLs for networks (Sepolia, Mainnet, etc.)
+- Add `ETHERSCAN_API_KEY` (get one free from [Etherscan](https://etherscan.io/apis))
+- Optionally add `CMC_API_KEY` for gas price reporting
 
-* `packages/contracts/.env.hardhat.local`
-
-  * `PRIVATE_KEY=` or `MNEMONIC=`
-  * `SEPOLIA_RPC=...` (and others you use)
-  * `ETHERSCAN_API_KEY=...` (for verification)
-  * optional `CMC_API_KEY=` (gas reporter USD)
-
-Optional native speedups:
-
+**Optional speedup:** If you want faster builds, run:
 ```bash
 pnpm approve-builds
-# select: bufferutil, utf-8-validate, keccak, secp256k1
+# Then select: bufferutil, utf-8-validate, keccak, secp256k1
 ```
 
-## CI & deployment
+## Next Steps After Setup
 
-- `.github/workflows/ci.yml` runs on PRs and pushes to `main`: pnpm install, frontend lint + build, Hardhat compile/test, Foundry tests, and a non-blocking Solhint pass.
-- `.github/workflows/deploy-fleek.yml` triggers after CI succeeds on `main` (or manually via `workflow_dispatch`); it rebuilds `apps/dao-dapp` and ships the `dist` folder to IPFS via `FleekHQ/action-deploy@v1`.
-- Add `FLEEK_API_KEY` as a GitHub secret (scoped deploy key from Fleek dashboard). No Fleek secrets are stored in the repo.
-- Generate `apps/dao-dapp/.fleek.json` by running `pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init` inside that folder and committing the file. Keep the publish directory set to `dist` (or adjust the workflow if you change it).
-- Use Fleek build command: `HUSKY=0 corepack enable && corepack prepare pnpm@10.16.1 --activate && pnpm install --frozen-lockfile=false && pnpm web:build`
-- Publish directory in Fleek: `apps/dao-dapp/dist` (set this when linking the GitHub repo in Fleek UI)
-- Add frontend env vars (VITE_WALLETCONNECT_ID, RPC URLs, etc.) in Fleek → Site → Environment variables (same values as your local `.env.local`; do not add `FLEEK_API_KEY` there).
+1. **Edit apps/dao-dapp/.env.local** - Add your WalletConnect ID and RPC URLs
+2. **Edit packages/contracts/.env.hardhat.local** - Add your private key/mnemonic and API keys
+3. **To deploy the website locally**, run `pnpm web:dev` from the root directory
+4. **To deploy the app online**, follow the detailed steps below
 
-### Rookie checklist (post-setup)
-1. Fill `apps/dao-dapp/.env.local` (WalletConnect ID + RPC URLs).
-2. (Optional) Fill `packages/contracts/.env.hardhat.local` if you will deploy contracts.
-3. In `apps/dao-dapp`: `set -a; source .env.local; set +a; pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init` → commit the generated `.fleek.json`.
-4. Push to GitHub; add repo secret `FLEEK_API_KEY`.
-5. In Fleek UI: set build command above, publish dir `apps/dao-dapp/dist`, add frontend env vars, then Deploy.
-6. Future deploys happen automatically on pushes to `main` (CI → deploy workflow) or manually from Fleek.
+## Deploy Your App Online
+
+### Step 1: Create a GitHub repository
+- Go to https://github.com and sign in (or create a free account)
+- Click the '+' icon in the top right corner → 'New repository'
+- Name your repository (e.g., 'my-dao-dapp')
+- Choose 'Public' or 'Private'
+- **DO NOT initialize with README, .gitignore, or license** (we already have these)
+- Click 'Create repository'
+
+### Step 2: Sync your project to GitHub
+- In your terminal, make sure you're in the project root folder
+- Check if git is initialized: `git status`
+- If not initialized, run: `git init`
+- Add your GitHub repo as remote: `git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git`
+  (Replace YOUR_USERNAME and YOUR_REPO_NAME with your actual GitHub username and repo name)
+- Stage all files: `git add -A`
+- Commit: `git commit -m 'Initial commit'`
+- Push to GitHub: `git push -u origin main`
+- Refresh your GitHub page - you should see all your files there!
+
+### Step 3: Set up Fleek and configure deployment
+- Go to https://app.fleek.co and sign in (or create a free account)
+- Click 'Create new - site'
+- Select code location **GitHub**
+- Authorize Fleek to access your GitHub account (click 'Authorize')
+- Select your repository from the list and click 'Deploy'
+- Select the 'main' branch (or your default branch name)
+- On the same configuration page, you'll see these fields:
+  * **'Framework'**: Select 'Vite' from the dropdown (or 'Other' if Vite is not available)
+  * **'Branch'**: Should already show 'main' (or your default branch)
+  * **'Publish Directory'**: Enter `apps/dao-dapp/dist`
+  * **'Build Command'**: Enter `corepack enable && corepack prepare pnpm@10.16.1 --activate && pnpm install --frozen-lockfile=false && pnpm web:build`
+    (This enables Corepack, sets up pnpm, installs dependencies, then builds your app)
+    (The build creates the 'dist' folder that Fleek will deploy)
+  * Under advanced options, **'Docker Image'**: Change from 'fleek/node:lts' to 'node:22'
+    (This ensures Node.js version 22 is used, which your project requires)
+    (If 'node:22' doesn't work, try 'fleek/node:22' or check Fleek docs for Node 22 image)
+  * **'Base Directory'**: Leave as './' (or click 'Select' and choose the project root)
+- Scroll down to the 'Environment Variables' section (on the same page)
+- **IMPORTANT**: Add these environment variables **BEFORE** clicking 'Deploy site'
+- Click 'Add Variable' or '+' button for each variable
+- Add these variables one by one (get values from your `apps/dao-dapp/.env.local` file):
+  * **Name**: `VITE_WALLETCONNECT_ID`
+    **Value**: (get one free from https://cloud.walletconnect.com - sign up and create a project)
+  * **Name**: `VITE_MAINNET_RPC`
+    **Value**: `https://cloudflare-eth.com` (or your custom RPC)
+  * **Name**: `VITE_POLYGON_RPC`
+    **Value**: `https://polygon-rpc.com` (or your custom RPC)
+  * **Name**: `VITE_OPTIMISM_RPC`
+    **Value**: `https://optimism.publicnode.com` (or your custom RPC)
+  * **Name**: `VITE_ARBITRUM_RPC`
+    **Value**: `https://arbitrum.publicnode.com` (or your custom RPC)
+  * **Name**: `VITE_SEPOLIA_RPC`
+    **Value**: `https://rpc.sepolia.org` (or your custom RPC)
+- (If you see 'Hide advanced options', click it to see more fields if needed)
+
+### Step 4: Deploy manually (first time)
+- Click 'Deploy Site' or 'Deploy' button at the bottom of the Fleek page
+- Wait for the build to complete (you'll see progress in Fleek dashboard)
+- Once done, you'll get a URL like: `your-site.on.fleek.co`
+- Your app is now live! Share the URL with anyone 🌐
+
+**Troubleshooting: If deployment fails or website is blank:**
+- Go to your site in Fleek dashboard → 'Deployments' tab
+- Click on the failed deployment to see details
+- Click on 'Build Logs' step to see error messages
+- Common issues and fixes:
+  * **If website deploys but shows blank page:**
+    → Go to Settings → Environment Variables
+    → Make sure all VITE_* variables are added (especially VITE_WALLETCONNECT_ID)
+    → Redeploy after adding missing variables
+  * **If you see 'Unsupported engine' or wrong Node version:**
+    → Go to Settings → Make sure 'Docker Image' is set to 'fleek/node:22' or 'node:22'
+  * **If you see 'tsc: not found' or 'node_modules missing':**
+    → Make sure 'Build Command' includes all steps: `corepack enable && corepack prepare pnpm@10.16.1 --activate && pnpm install --frozen-lockfile=false && pnpm web:build`
+  * **If you see 'Dist directory does not exist' AFTER build completes:**
+    → Check that 'Publish Directory' is exactly `apps/dao-dapp/dist` (not just 'dist')
+    → Check that 'Base Directory' is './' (project root)
+    → The build command should CREATE the dist folder - if it doesn't exist, the build failed
+- After fixing, click 'Redeploy' button to try again
+
+### Step 5: Set up automatic deployment via GitHub Actions (optional but recommended)
+- This allows your app to auto-deploy when you push code to GitHub
+- Go to https://app.fleek.co → Your site → Settings → API Keys
+- Click 'Generate API Key' or copy your existing API key
+- Go to your GitHub repository page
+- Click 'Settings' tab (top menu)
+- In the left sidebar, click 'Secrets and variables' → 'Actions'
+- Click 'New repository secret' button
+- **Name**: `FLEEK_API_KEY`
+- **Value**: Paste the API key you copied from Fleek
+- Click 'Add secret'
+- Now go to your project folder in terminal
+- Navigate to apps/dao-dapp: `cd apps/dao-dapp`
+- Run: `pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init`
+- This creates a `.fleek.json` file
+- Go back to project root: `cd ../..`
+- Commit and push: `git add apps/dao-dapp/.fleek.json && git commit -m 'Add Fleek config' && git push`
+- Now every time you push to main branch, GitHub Actions will automatically deploy your app!
 
 ---
 

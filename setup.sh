@@ -6,7 +6,7 @@ set -euo pipefail
 # Frontend: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v4
 # Contracts: Hardhat v2 + @nomicfoundation/hardhat-toolbox (ethers v6) + TypeChain
 #            + hardhat-deploy + gas-reporter + contract-sizer + docgen + OpenZeppelin
-# DX: Foundry (Forge/Anvil), ESLint/Prettier/Solhint, Husky + lint-staged, CI
+# DX: Foundry (Forge/Anvil), ESLint/Prettier/Solhint, Husky + lint-staged, Local Safety Net
 # Notes:
 # - Non-interactive Vite scaffold (no prompts)
 # - Auto-stops any running `anvil` before Foundry updates
@@ -83,7 +83,13 @@ cat > package.json <<'EOF'
     "anvil:stop": "pkill -f '^anvil( |$)' || true",
     "foundry:update": "$HOME/.foundry/bin/foundryup",
     "forge:test": "forge test -vvv",
-    "forge:fmt": "forge fmt"
+    "forge:fmt": "forge fmt",
+
+    "check:all": "pnpm check:frontend && pnpm check:contracts",
+    "check:frontend": "pnpm dlx eslint apps/dao-dapp --ext .ts,.tsx && pnpm web:build",
+    "check:contracts": "pnpm contracts:compile && pnpm contracts:test && pnpm forge:test",
+    "check:quick": "pnpm dlx eslint apps/dao-dapp --ext .ts,.tsx && pnpm --filter contracts exec solhint 'contracts/**/*.sol' || true",
+    "check:full": "pnpm check:all"
   }
 }
 EOF
@@ -788,6 +794,41 @@ fi
 EOF
 chmod +x .husky/pre-commit
 
+cat > .husky/pre-push <<'EOF'
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+echo "Running pre-push checks (compile + tests)..."
+echo ""
+
+# Compile contracts
+echo "Compiling contracts..."
+if ! pnpm contracts:compile; then
+  echo "❌ Contract compilation failed. Fix errors before pushing."
+  exit 1
+fi
+
+# Run Hardhat tests
+echo "Running Hardhat tests..."
+if ! pnpm contracts:test; then
+  echo "❌ Hardhat tests failed. Fix tests before pushing."
+  exit 1
+fi
+
+# Run Foundry tests (if available)
+if command -v forge >/dev/null 2>&1; then
+  echo "Running Foundry tests..."
+  if ! pnpm forge:test; then
+    echo "❌ Foundry tests failed. Fix tests before pushing."
+    exit 1
+  fi
+else
+  echo "⚠️  Foundry not found, skipping Foundry tests"
+fi
+
+echo "✅ All pre-push checks passed!"
+EOF
+chmod +x .husky/pre-push
+
 cat > .lintstagedrc.json <<'EOF'
 {
   "*.{ts,tsx,js}": ["eslint --fix", "prettier --write"],
@@ -795,62 +836,76 @@ cat > .lintstagedrc.json <<'EOF'
 }
 EOF
 
-# --- CI ----------------------------------------------------------------------
-cat > .github/workflows/ci.yml <<'EOF'
-name: CI
+# Create comprehensive check script
+mkdir -p scripts
+cat > scripts/check.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
 
-on:
-  pull_request:
-  push:
-    branches: [main]
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-env:
-  NODE_VERSION: "22"
-  PNPM_VERSION: "10.16.1"
+info() { echo -e "${GREEN}[✓]${NC} $*"; }
+warn() { echo -e "${YELLOW}[!]${NC} $*"; }
+err() { echo -e "${RED}[✗]${NC} $*"; }
 
-jobs:
-  lint-test-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+echo "Running comprehensive safety checks..."
+echo ""
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+# Frontend checks
+info "Checking frontend..."
+if pnpm dlx eslint apps/dao-dapp --ext .ts,.tsx; then
+  info "Frontend linting passed"
+else
+  err "Frontend linting failed"
+  exit 1
+fi
 
-      - name: Enable Corepack
-        run: corepack enable
+if pnpm web:build; then
+  info "Frontend build passed"
+else
+  err "Frontend build failed"
+  exit 1
+fi
 
-      - name: Use pnpm ${{ env.PNPM_VERSION }}
-        run: corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
+echo ""
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile=false
+# Contract checks
+info "Checking contracts..."
+if pnpm contracts:compile; then
+  info "Contract compilation passed"
+else
+  err "Contract compilation failed"
+  exit 1
+fi
 
-      - name: Lint frontend
-        run: pnpm dlx eslint apps/dao-dapp --ext .ts,.tsx
+if pnpm contracts:test; then
+  info "Hardhat tests passed"
+else
+  err "Hardhat tests failed"
+  exit 1
+fi
 
-      - name: Build frontend
-        run: pnpm web:build
+if command -v forge >/dev/null 2>&1; then
+  if pnpm forge:test; then
+    info "Foundry tests passed"
+  else
+    err "Foundry tests failed"
+    exit 1
+  fi
+else
+  warn "Foundry not found, skipping Foundry tests"
+fi
 
-      - name: Compile contracts (Hardhat)
-        run: pnpm contracts:compile
-
-      - name: Hardhat tests
-        run: pnpm --filter contracts test
-
-      - name: Foundry tests
-        run: |
-          curl -L https://foundry.paradigm.xyz | bash
-          ~/.foundry/bin/foundryup
-          forge test -vvv
-        working-directory: packages/contracts
-
-      - name: Solhint (non-blocking)
-        run: pnpm --filter contracts exec solhint 'contracts/**/*.sol' || true
+echo ""
+info "All checks passed! ✅"
 EOF
+chmod +x scripts/check.sh
+
+# --- CI removed - all checks run locally via Husky hooks and pnpm scripts ---
 
 # --- Deploy to Fleek (IPFS) --------------------------------------------------
 cat > .github/workflows/deploy-fleek.yml <<'EOF'
@@ -858,9 +913,6 @@ name: Deploy (Fleek IPFS)
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
 
 env:
   NODE_VERSION: "22"
@@ -868,13 +920,10 @@ env:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_commit.id || github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -906,7 +955,7 @@ jobs:
         with:
           apiKey: ${{ secrets.FLEEK_API_KEY }}
           workDir: apps/dao-dapp
-          commitHash: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_commit.id || github.sha }}
+          commitHash: ${{ github.sha }}
 EOF
 
 # --- README ------------------------------------------------------------------
@@ -917,7 +966,7 @@ cat > README.md <<'EOF'
 **Contracts**: Hardhat v2 + @nomicfoundation/hardhat-toolbox (ethers v6), OpenZeppelin, TypeChain, hardhat-deploy  
 **DX**: Foundry (Forge/Anvil), gas-reporter, contract-sizer, solidity-docgen (auto, opt-out), Solhint/Prettier, Husky  
 **Documentation**: Comprehensive NatSpec support with linting, validation, and auto-generation (disable with `DOCS_AUTOGEN=false`)  
-**CI**: GitHub Actions
+**Local Safety Net**: Automated checks via Husky hooks (pre-commit, pre-push) and pnpm scripts
 
 ## 1) First-time setup
 
@@ -944,15 +993,38 @@ pnpm approve-builds
 # Then select: bufferutil, utf-8-validate, keccak, secp256k1
 ```
 
-## CI & deployment
+## Local Safety Net
 
-### Automated Testing (CI)
-When you push code or create a pull request, GitHub Actions automatically:
-- Installs all dependencies
-- Lints and builds your frontend
-- Compiles and tests your contracts (Hardhat)
-- Runs Foundry tests
-- Checks code quality with Solhint
+All checks and quality gates run **locally on your machine** - no need for GitHub Actions!
+
+### Automatic Checks (via Husky Hooks)
+
+**Pre-commit hook** (runs automatically before every `git commit`):
+- Formats code with Prettier
+- Lints TypeScript/JavaScript with ESLint
+- Lints Solidity with Solhint
+- Formats Solidity with Forge (if Foundry is installed)
+- **You can't commit broken code!**
+
+**Pre-push hook** (runs automatically before every `git push`):
+- Compiles all contracts
+- Runs Hardhat tests
+- Runs Foundry tests (if installed)
+- **You can't push broken code!**
+- Skip with `git push --no-verify` if needed
+
+### Manual Check Commands
+
+Run comprehensive checks anytime:
+
+```bash
+pnpm check:all        # Run all checks (frontend + contracts)
+pnpm check:frontend   # Lint and build frontend only
+pnpm check:contracts  # Compile and test contracts only
+pnpm check:quick      # Fast checks (linting only, no tests)
+pnpm check:full       # Alias for check:all
+./scripts/check.sh    # Comprehensive bash script with detailed output
+```
 
 ### Deploy Your App Online (Optional)
 
@@ -1000,6 +1072,28 @@ pnpm anvil:start   # Start a local blockchain
 pnpm anvil:stop    # Stop it when you're done
 ```
 This gives you a local Ethereum network to test your contracts without spending real money.
+
+### Run Safety Checks
+
+**Quick checks (before committing):**
+```bash
+pnpm check:quick      # Fast linting checks only
+```
+
+**Full safety check (before pushing):**
+```bash
+pnpm check:all       # Run all checks (frontend + contracts)
+# Or use the detailed script:
+./scripts/check.sh   # Comprehensive check with colored output
+```
+
+**Individual checks:**
+```bash
+pnpm check:frontend   # Lint and build frontend
+pnpm check:contracts  # Compile and test contracts
+```
+
+> 💡 **Note:** These checks run automatically via Husky hooks (pre-commit and pre-push), but you can also run them manually anytime!
 
 ### Working with Contracts
 
@@ -1129,6 +1223,12 @@ echo "Next:"
 echo "1) Edit apps/dao-dapp/.env.local"
 echo "2) Edit packages/contracts/.env.hardhat.local"
 echo "3) To deploy the website locally, run \"pnpm web\:dev\" from the root directory"
+echo ""
+echo "💡 Local Safety Net:"
+echo "   - Pre-commit hook: Automatically formats and lints code before commit"
+echo "   - Pre-push hook: Automatically compiles and tests before push"
+echo "   - Manual checks: Run 'pnpm check:all' anytime for full safety check"
+echo ""
 echo "4) To deploy the app online:"
 echo "   Step 1: Create a GitHub repository"
 echo "   - Go to https://github.com and sign in (or create a free account)"

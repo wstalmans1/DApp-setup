@@ -40,7 +40,6 @@ printf "v22\n" > .nvmrc
 pnpm config set ignore-workspace-root-check true
 
 # --- Root files --------------------------------------------------------------
-mkdir -p .github/workflows
 
 cat > .gitignore <<'EOF'
 node_modules

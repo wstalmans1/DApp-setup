@@ -52,7 +52,11 @@ packages/contracts/typechain-types
 packages/contracts/.env.hardhat.local
 apps/dao-dapp/src/contracts/*
 !apps/dao-dapp/src/contracts/.gitkeep
+.github/workflows
 EOF
+
+# Clean up any existing .github/workflows folder (we don't use GitHub Actions)
+[ -d .github/workflows ] && rm -rf .github/workflows
 
 cat > package.json <<'EOF'
 {

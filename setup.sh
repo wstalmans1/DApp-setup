@@ -86,9 +86,9 @@ cat > package.json <<'EOF'
     "forge:fmt": "forge fmt",
 
     "check:all": "pnpm check:frontend && pnpm check:contracts",
-    "check:frontend": "pnpm dlx eslint apps/dao-dapp --ext .ts,.tsx && pnpm web:build",
+    "check:frontend": "pnpm --dir apps/dao-dapp exec eslint . --ext .ts,.tsx && pnpm web:build",
     "check:contracts": "pnpm contracts:compile && pnpm contracts:test && pnpm forge:test",
-    "check:quick": "pnpm dlx eslint apps/dao-dapp --ext .ts,.tsx && pnpm --filter contracts exec solhint 'contracts/**/*.sol' || true",
+    "check:quick": "pnpm --dir apps/dao-dapp exec eslint . --ext .ts,.tsx && pnpm --filter contracts exec solhint 'contracts/**/*.sol' || true",
     "check:full": "pnpm check:all"
   }
 }
@@ -731,15 +731,40 @@ EOF
 
 # --- Lint/format & Husky -----------------------------------------------------
 pnpm -w add -D eslint prettier husky lint-staged
+pnpm --dir apps/dao-dapp add -D eslint-plugin-react-hooks @eslint/js
 pnpm --dir packages/contracts add -D solhint prettier prettier-plugin-solidity
 
-cat > apps/dao-dapp/.eslintrc.json <<'EOF'
-{
-  "root": true,
-  "env": { "browser": true, "es2022": true },
-  "extends": ["eslint:recommended", "plugin:react-hooks/recommended"],
-  "parserOptions": { "ecmaVersion": "latest", "sourceType": "module" }
-}
+cat > apps/dao-dapp/eslint.config.js <<'EOF'
+import js from '@eslint/js'
+import reactHooks from 'eslint-plugin-react-hooks'
+
+export default [
+  js.configs.recommended,
+  {
+    files: ['**/*.{js,jsx,ts,tsx}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        global: 'readonly'
+      }
+    },
+    plugins: {
+      'react-hooks': reactHooks
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules
+    }
+  },
+  {
+    ignores: ['dist/**', 'node_modules/**', '*.config.js', 'vite.config.ts']
+  }
+]
 EOF
 
 cat > .prettierrc.json <<'EOF'
@@ -857,7 +882,7 @@ echo ""
 
 # Frontend checks
 info "Checking frontend..."
-if pnpm dlx eslint apps/dao-dapp --ext .ts,.tsx; then
+if pnpm --dir apps/dao-dapp exec eslint . --ext .ts,.tsx; then
   info "Frontend linting passed"
 else
   err "Frontend linting failed"

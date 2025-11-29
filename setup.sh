@@ -731,17 +731,19 @@ EOF
 
 # --- Lint/format & Husky -----------------------------------------------------
 pnpm -w add -D eslint prettier husky lint-staged
-pnpm --dir apps/dao-dapp add -D eslint-plugin-react-hooks @eslint/js
+pnpm --dir apps/dao-dapp add -D eslint-plugin-react-hooks @eslint/js @typescript-eslint/parser @typescript-eslint/eslint-plugin
 pnpm --dir packages/contracts add -D solhint prettier prettier-plugin-solidity
 
 cat > apps/dao-dapp/eslint.config.js <<'EOF'
 import js from '@eslint/js'
 import reactHooks from 'eslint-plugin-react-hooks'
+import tseslint from '@typescript-eslint/eslint-plugin'
+import tsparser from '@typescript-eslint/parser'
 
 export default [
   js.configs.recommended,
   {
-    files: ['**/*.{js,jsx,ts,tsx}'],
+    files: ['**/*.{js,jsx}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -756,6 +758,34 @@ export default [
     },
     plugins: {
       'react-hooks': reactHooks
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules
+    }
+  },
+  {
+    files: ['**/*.{ts,tsx}'],
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        ecmaFeatures: {
+          jsx: true
+        }
+      },
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        global: 'readonly'
+      }
+    },
+    plugins: {
+      'react-hooks': reactHooks,
+      '@typescript-eslint': tseslint
     },
     rules: {
       ...reactHooks.configs.recommended.rules
@@ -932,56 +962,7 @@ chmod +x scripts/check.sh
 
 # --- CI removed - all checks run locally via Husky hooks and pnpm scripts ---
 
-# --- Deploy to Fleek (IPFS) --------------------------------------------------
-cat > .github/workflows/deploy-fleek.yml <<'EOF'
-name: Deploy (Fleek IPFS)
-
-on:
-  workflow_dispatch:
-
-env:
-  NODE_VERSION: "22"
-  PNPM_VERSION: "10.16.1"
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Use pnpm ${{ env.PNPM_VERSION }}
-        run: corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile=false
-
-      - name: Build frontend
-        run: pnpm web:build
-
-      - name: Ensure Fleek config exists
-        run: |
-          test -f apps/dao-dapp/.fleek.json || {
-            echo "::error::Missing apps/dao-dapp/.fleek.json. Run 'pnpm dlx @fleekhq/fleek-cli@0.1.8 site:init' inside apps/dao-dapp and commit the file."
-            exit 1
-          }
-
-      - name: Deploy to Fleek (IPFS)
-        uses: FleekHQ/action-deploy@v1
-        with:
-          apiKey: ${{ secrets.FLEEK_API_KEY }}
-          workDir: apps/dao-dapp
-          commitHash: ${{ github.sha }}
-EOF
+# --- GitHub workflows removed - all checks and deployments run locally ---
 
 # --- README ------------------------------------------------------------------
 cat > README.md <<'EOF'

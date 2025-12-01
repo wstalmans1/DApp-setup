@@ -864,7 +864,10 @@ export default [
         console: 'readonly',
         process: 'readonly',
         Buffer: 'readonly',
-        global: 'readonly'
+        global: 'readonly',
+        alert: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly'
       }
     },
     plugins: {
@@ -891,7 +894,10 @@ export default [
         console: 'readonly',
         process: 'readonly',
         Buffer: 'readonly',
-        global: 'readonly'
+        global: 'readonly',
+        alert: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly'
       }
     },
     plugins: {

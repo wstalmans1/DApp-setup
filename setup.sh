@@ -130,6 +130,9 @@ pnpm --dir apps/dao-dapp add @libp2p/crypto@^2.0.0
 # Cryptography for wallet-based encryption
 pnpm --dir apps/dao-dapp add @noble/curves@^1.0.0 @noble/hashes@^1.0.0
 
+# CID handling for IPFS/IPNS
+pnpm --dir apps/dao-dapp add multiformats@^13.0.0
+
 # HTTP client fallback (for low-end devices, add later)
 # Uncomment when implementing adaptive IPFS service:
 # pnpm --dir apps/dao-dapp add ipfs-http-client@^60.0.0
@@ -242,7 +245,7 @@ export default function App() {
       <div className="relative flex w-full flex-col gap-10 px-6 py-10">
         <header className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/5 px-6 py-4 backdrop-blur">
           <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Starter</p>
+            <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Starter v27.2</p>
             <h1 className="text-2xl font-semibold text-white">DAO DApp</h1>
           </div>
           <ConnectButton />

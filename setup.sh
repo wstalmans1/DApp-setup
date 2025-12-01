@@ -1003,7 +1003,10 @@ chmod +x .husky/pre-push
 
 cat > .lintstagedrc.json <<'EOF'
 {
-  "*.{ts,tsx,js}": ["eslint --fix", "prettier --write"],
+  "apps/dao-dapp/**/*.{ts,tsx,js}": [
+    "bash -c 'cd apps/dao-dapp && eslint --fix'",
+    "prettier --write"
+  ],
   "packages/contracts/**/*.sol": ["prettier --write", "solhint --fix"]
 }
 EOF

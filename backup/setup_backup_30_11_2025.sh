@@ -7,7 +7,6 @@ set -euo pipefail
 # Contracts: Hardhat v2 + @nomicfoundation/hardhat-toolbox (ethers v6) + TypeChain
 #            + hardhat-deploy + gas-reporter + contract-sizer + docgen + OpenZeppelin
 # DX: Foundry (Forge/Anvil), ESLint/Prettier/Solhint, Husky + lint-staged, Local Safety Net
-# IPFS/IPNS: Helia v2 (full IPFS) + HTTP fallback + IPNS + @libp2p/crypto + @noble/curves + @storacha/client + @fleek-platform/sdk
 # Notes:
 # - Non-interactive Vite scaffold (no prompts)
 # - Auto-stops any running `anvil` before Foundry updates
@@ -119,26 +118,6 @@ pnpm --dir apps/dao-dapp add -D @types/react@18.3.12 @types/react-dom@18.3.1
 # Web3 + data
 pnpm --dir apps/dao-dapp add @rainbow-me/rainbowkit@~2.2.8 wagmi@~2.16.9 viem@~2.37.6 @tanstack/react-query@~5.90.2
 pnpm --dir apps/dao-dapp add @tanstack/react-query-devtools@~5.90.2 zod@~3.22.0
-
-# IPFS/IPNS - Helia (primary) + HTTP client (fallback) + IPNS support
-# Core IPFS implementation (Helia)
-pnpm --dir apps/dao-dapp add helia@^2.0.0 @helia/unixfs@^2.0.0 @helia/ipns@^2.0.0
-
-# IPNS key generation and management
-pnpm --dir apps/dao-dapp add @libp2p/crypto@^2.0.0
-
-# Cryptography for wallet-based encryption
-pnpm --dir apps/dao-dapp add @noble/curves@^1.0.0 @noble/hashes@^1.0.0
-
-# HTTP client fallback (for low-end devices, add later)
-# Uncomment when implementing adaptive IPFS service:
-# pnpm --dir apps/dao-dapp add ipfs-http-client@^60.0.0
-
-# IPFS Pinning Services (choose one or multiple)
-# Option 1: Storacha (official SDK for IPFS pinning and storage - email-based auth)
-# Option 2: Pinata (official SDK for IPFS pinning and storage)
-# Option 3: Fleek Platform SDK (official SDK for IPFS pinning and storage)
-pnpm --dir apps/dao-dapp add @storacha/client@^1.0.0 pinata@^1.0.0 @fleek-platform/sdk@^3.0.0 axios@^1.7.0
 
 # Tailwind v4
 pnpm --dir apps/dao-dapp add -D tailwindcss@~4.0.0 @tailwindcss/postcss@~4.0.0 postcss@~8.4.47
@@ -261,94 +240,10 @@ VITE_POLYGON_RPC=https://polygon-rpc.com
 VITE_OPTIMISM_RPC=https://optimism.publicnode.com
 VITE_ARBITRUM_RPC=https://arbitrum.publicnode.com
 VITE_SEPOLIA_RPC=https://rpc.sepolia.org
-
-# IPFS/IPNS Configuration
-# Option 1: Storacha (Recommended for learning - free tier available)
-# Email-based authentication: Users must create account via CLI or console.storacha.network
-# After account creation, use client.login(email) in code
-VITE_STORACHA_EMAIL=
-
-# Option 2: Pinata (Recommended for production - free tier available)
-# Get JWT from: https://app.pinata.cloud → API Keys → New Key
-# Get Gateway from: https://app.pinata.cloud → Gateways (format: fun-llama-300.mypinata.cloud)
-VITE_PINATA_JWT=
-VITE_PINATA_GATEWAY=
-
-# Option 3: Fleek Platform (IPFS pinning and storage service)
-# Get CLIENT_ID from: https://app.fleek.co → Create Application → Get Client ID
-VITE_FLEEK_CLIENT_ID=
-VITE_FLEEK_GATEWAY=https://ipfs.fleek.co
-
-# Option 4: Public IPFS Gateways (fallback)
-VITE_IPFS_GATEWAY_1=https://dweb.link
-VITE_IPFS_GATEWAY_2=https://ipfs.io
-VITE_IPFS_GATEWAY_3=https://cloudflare-ipfs.com
-VITE_IPFS_GATEWAY_4=https://gateway.pinata.cloud
-
-# IPNS Configuration
-VITE_IPNS_ENABLED=true
-VITE_IPNS_REPUBLISH_INTERVAL=86400
 EOF
 cp -f apps/dao-dapp/.env.example apps/dao-dapp/.env.local
 
 pnpm --dir apps/dao-dapp install
-
-# Create IPFS/IPNS service directory structure
-mkdir -p apps/dao-dapp/src/services/ipfs
-mkdir -p apps/dao-dapp/src/services/ipns
-mkdir -p apps/dao-dapp/src/services/encryption
-mkdir -p apps/dao-dapp/src/types
-mkdir -p apps/dao-dapp/src/utils
-
-# Create placeholder files for IPFS services (will be implemented in learning path)
-cat > apps/dao-dapp/src/services/ipfs/.gitkeep <<'EOF'
-# IPFS service implementation
-# Supports multiple pinning providers:
-# - Storacha (via @storacha/client - VITE_STORACHA_EMAIL)
-#   Email-based authentication: client.login(email) after account creation
-#   Requires account setup via CLI (storacha login) or console.storacha.network
-# - Pinata (via pinata SDK - VITE_PINATA_JWT, VITE_PINATA_GATEWAY)
-# - Fleek Platform (via @fleek-platform/sdk/browser - VITE_FLEEK_CLIENT_ID)
-#   Uses ApplicationAccessTokenService for client-side authentication
-# Users can configure which provider(s) to use via environment variables
-EOF
-
-cat > apps/dao-dapp/src/services/ipfs/providers.ts <<'EOF'
-// IPFS provider configuration and selection
-// Supports multiple pinning providers:
-// - Storacha (via @storacha/client - VITE_STORACHA_EMAIL)
-//   Usage: import { create } from "@storacha/client"
-//   const client = await create()
-//   const account = await client.login(email)
-//   await account.plan.wait() // Wait for payment plan selection
-//   const space = await client.createSpace("my-space", { account })
-//   const cid = await client.uploadFile(file)
-// - Pinata (via pinata SDK - VITE_PINATA_JWT, VITE_PINATA_GATEWAY)
-//   Usage: import { PinataSDK } from "pinata"
-//   const pinata = new PinataSDK({ pinataJwt, pinataGateway })
-// - Fleek Platform (via @fleek-platform/sdk/browser - VITE_FLEEK_CLIENT_ID)
-//   Uses ApplicationAccessTokenService for client-side authentication
-// Users can configure which provider(s) to use via environment variables
-// Will be implemented in learning path
-EOF
-
-cat > apps/dao-dapp/src/services/ipns/.gitkeep <<'EOF'
-# IPNS service implementation
-EOF
-
-cat > apps/dao-dapp/src/services/encryption/.gitkeep <<'EOF'
-# Encryption service implementation
-EOF
-
-cat > apps/dao-dapp/src/types/profile.ts <<'EOF'
-// Profile type definitions
-// Will be implemented in learning path Phase 4
-EOF
-
-cat > apps/dao-dapp/src/utils/deviceCapabilities.ts <<'EOF'
-// Device capability detection
-// Will be implemented when adding adaptive IPFS service
-EOF
 
 # --- Contracts workspace (Hardhat v2 + plugins) ------------------------------
 mkdir -p packages/contracts
@@ -1077,8 +972,6 @@ cat > README.md <<'EOF'
 # DApp Setup (Rookie-friendly)
 
 **Frontend**: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v4  
-**IPFS/IPNS**: Helia v2 (full IPFS node) + @helia/unixfs + @helia/ipns + @libp2p/crypto + @noble/curves  
-**IPFS Pinning**: Storacha SDK, Pinata SDK, or Fleek Platform SDK (choose one or multiple)  
 **Contracts**: Hardhat v2 + @nomicfoundation/hardhat-toolbox (ethers v6), OpenZeppelin, TypeChain, hardhat-deploy  
 **DX**: Foundry (Forge/Anvil), gas-reporter, contract-sizer, solidity-docgen (auto, opt-out), Solhint/Prettier, Husky  
 **Documentation**: Comprehensive NatSpec support with linting, validation, and auto-generation (disable with `DOCS_AUTOGEN=false`)  
@@ -1096,20 +989,6 @@ After setup completes, you'll need to configure your environment files:
 **Step 1:** Edit `apps/dao-dapp/.env.local`
 - Add your `VITE_WALLETCONNECT_ID` (get one free from [WalletConnect Cloud](https://cloud.walletconnect.com))
 - Add RPC URLs for the networks you want to use (defaults are provided)
-- **IPFS/IPNS Configuration** (choose one or multiple pinning services):
-  - `VITE_STORACHA_EMAIL` - Your email for [Storacha](https://storacha.network) (free tier available)
-    - **Setup Steps (pnpm-first):**
-      1. Install CLI: `pnpm dlx @storacha/cli@latest`
-      2. Create account: `storacha login your@email.com` (check email for verification link)
-      3. Select a plan (Free tier available) after email verification
-      4. Create a Space: `storacha space create my-space` (or use JS client in code)
-      5. Add your email to `.env.local` as `VITE_STORACHA_EMAIL`
-    - **Alternative:** Use web console at https://console.storacha.network
-    - **In Code:** Use `@storacha/client` - `const client = await create(); await client.login(email)`
-  - `VITE_PINATA_JWT` - Get from [Pinata](https://app.pinata.cloud) → API Keys → New Key (free tier available)
-  - `VITE_PINATA_GATEWAY` - Get from [Pinata](https://app.pinata.cloud) → Gateways (format: fun-llama-300.mypinata.cloud)
-  - `VITE_FLEEK_CLIENT_ID` - Get from [Fleek Platform](https://app.fleek.co) → Create Application → Get Client ID
-  - IPFS gateway URLs are pre-configured with defaults
 
 **Step 2:** Edit `packages/contracts/.env.hardhat.local`
 - Add your `PRIVATE_KEY` or `MNEMONIC` (for deploying contracts)
@@ -1351,18 +1230,7 @@ fi
 ok "Setup complete."
 echo "Next:"
 echo "1) Edit apps/dao-dapp/.env.local"
-echo "   - Add your VITE_WALLETCONNECT_ID (get one free from https://cloud.walletconnect.com)"
-echo "   - Add IPFS/IPNS configuration (choose one or multiple):"
-echo "     * VITE_STORACHA_EMAIL (your email for Storacha - create account first:"
-echo "       pnpm dlx @storacha/cli@latest && storacha login your@email.com) OR"
-echo "     * VITE_PINATA_JWT (get from https://app.pinata.cloud → API Keys → New Key)"
-echo "     * VITE_PINATA_GATEWAY (get from https://app.pinata.cloud → Gateways) OR"
-echo "     * VITE_FLEEK_CLIENT_ID (get from https://app.fleek.co → Create Application → Get Client ID)"
-echo "   - RPC URLs are pre-configured with defaults"
 echo "2) Edit packages/contracts/.env.hardhat.local"
-echo "   - Add your PRIVATE_KEY or MNEMONIC (for deploying contracts)"
-echo "   - Add RPC URLs for networks (Sepolia, Mainnet, etc.)"
-echo "   - Add ETHERSCAN_API_KEY (get one free from https://etherscan.io/apis)"
 echo "3) To deploy the website locally, run \"pnpm web\:dev\" from the root directory"
 echo ""
 echo "💡 Local Safety Net:"
@@ -1424,26 +1292,6 @@ echo "     * Name: VITE_ARBITRUM_RPC"
 echo "       Value: https://arbitrum.publicnode.com (or your custom RPC)"
 echo "     * Name: VITE_SEPOLIA_RPC"
 echo "       Value: https://rpc.sepolia.org (or your custom RPC)"
-echo "     * Name: VITE_STORACHA_EMAIL"
-echo "       Value: (your email - create account first: pnpm dlx @storacha/cli@latest && storacha login your@email.com)"
-echo "       OR"
-echo "     * Name: VITE_PINATA_JWT"
-echo "       Value: (get from https://app.pinata.cloud → API Keys → New Key)"
-echo "     * Name: VITE_PINATA_GATEWAY"
-echo "       Value: (get from https://app.pinata.cloud → Gateways - format: fun-llama-300.mypinata.cloud)"
-echo "       OR"
-echo "     * Name: VITE_FLEEK_CLIENT_ID"
-echo "       Value: (get from https://app.fleek.co → Create Application → Get Client ID)"
-echo "     * Name: VITE_FLEEK_GATEWAY"
-echo "       Value: https://ipfs.fleek.co"
-echo "     * Name: VITE_IPFS_GATEWAY_1"
-echo "       Value: https://dweb.link"
-echo "     * Name: VITE_IPFS_GATEWAY_2"
-echo "       Value: https://ipfs.io"
-echo "     * Name: VITE_IPFS_GATEWAY_3"
-echo "       Value: https://cloudflare-ipfs.com"
-echo "     * Name: VITE_IPNS_ENABLED"
-echo "       Value: true"
 echo "   - (If you see 'Hide advanced options', click it to see more fields if needed)"
 echo ""
 echo "   Step 4: Deploy manually (first time)"
@@ -1459,10 +1307,7 @@ echo "   - Click on 'Build Logs' step to see error messages"
 echo "   - Common issues and fixes:"
 echo "     * If website deploys but shows blank page:"
 echo "       → Go to Settings → Environment Variables"
-echo "       → Make sure all VITE_* variables are added:"
-echo "         - VITE_WALLETCONNECT_ID (required)"
-echo "         - VITE_STORACHA_EMAIL or (VITE_PINATA_JWT + VITE_PINATA_GATEWAY) or VITE_FLEEK_CLIENT_ID (for IPFS)"
-echo "         - All RPC URLs (required for blockchain connections)"
+echo "       → Make sure all VITE_* variables are added (especially VITE_WALLETCONNECT_ID)"
 echo "       → Redeploy after adding missing variables"
 echo "     * If you see 'Unsupported engine' or wrong Node version:"
 echo "       → Go to Settings → Make sure 'Docker Image' is set to 'fleek/node:22' or 'node:22'"

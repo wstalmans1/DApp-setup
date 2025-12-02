@@ -139,9 +139,9 @@ pnpm --dir apps/dao-dapp add multiformats@^13.0.0
 
 # IPFS Pinning Services (choose one or multiple)
 # Option 1: Storacha (official SDK for IPFS pinning and storage - email-based auth)
-# Option 2: Pinata (official SDK for IPFS pinning and storage)
+# Option 2: Pinata (official SDK for IPFS pinning and storage - v2.5.1 latest)
 # Option 3: Fleek Platform SDK (official SDK for IPFS pinning and storage)
-pnpm --dir apps/dao-dapp add @storacha/client@^1.0.0 pinata@^1.0.0 @fleek-platform/sdk@^3.0.0 axios@^1.7.0
+pnpm --dir apps/dao-dapp add @storacha/client@^1.0.0 pinata@^2.5.1 @fleek-platform/sdk@^3.0.0 axios@^1.7.0
 
 # Tailwind v4
 pnpm --dir apps/dao-dapp add -D tailwindcss@~4.0.0 @tailwindcss/postcss@~4.0.0 postcss@~8.4.47
@@ -277,6 +277,11 @@ VITE_STORACHA_EMAIL=
 VITE_PINATA_JWT=
 VITE_PINATA_GATEWAY=
 
+# Local IPFS Node (Kubo) - Optional, for pinning to your own node
+# Default: http://localhost:5001 (standard Kubo API port)
+# Leave empty to disable local node pinning
+VITE_LOCAL_IPFS_API=http://localhost:5001
+
 # Option 3: Fleek Platform (IPFS pinning and storage service)
 # Get CLIENT_ID from: https://app.fleek.co → Create Application → Get Client ID
 VITE_FLEEK_CLIENT_ID=
@@ -303,14 +308,20 @@ mkdir -p apps/dao-dapp/src/services/encryption
 mkdir -p apps/dao-dapp/src/types
 mkdir -p apps/dao-dapp/src/utils
 
-# Create placeholder files for IPFS services (will be implemented in learning path)
+# Create placeholder files for IPFS services
+# Note: IPFS pinning service is implemented in:
+# - apps/dao-dapp/src/services/ipfs/pinning.ts (Pinata, local node, Helia pinning)
+# - apps/dao-dapp/src/services/ipfs.ts (Main IPFS service with auto-pinning)
+# These files are created during Phase 1 of the learning path, not by setup.sh
 cat > apps/dao-dapp/src/services/ipfs/.gitkeep <<'EOF'
 # IPFS service implementation
 # Supports multiple pinning providers:
 # - Storacha (via @storacha/client - VITE_STORACHA_EMAIL)
 #   Email-based authentication: client.login(email) after account creation
 #   Requires account setup via CLI (storacha login) or console.storacha.network
-# - Pinata (via pinata SDK - VITE_PINATA_JWT, VITE_PINATA_GATEWAY)
+# - Pinata (via pinata SDK v2.5.1 - VITE_PINATA_JWT, VITE_PINATA_GATEWAY)
+#   Usage: pinata.upload.public.cid(cid) for pinning existing CIDs
+#   Usage: pinata.files.public.list().cid(cid) for checking pin status
 # - Fleek Platform (via @fleek-platform/sdk/browser - VITE_FLEEK_CLIENT_ID)
 #   Uses ApplicationAccessTokenService for client-side authentication
 # Users can configure which provider(s) to use via environment variables
@@ -326,9 +337,11 @@ cat > apps/dao-dapp/src/services/ipfs/providers.ts <<'EOF'
 //   await account.plan.wait() // Wait for payment plan selection
 //   const space = await client.createSpace("my-space", { account })
 //   const cid = await client.uploadFile(file)
-// - Pinata (via pinata SDK - VITE_PINATA_JWT, VITE_PINATA_GATEWAY)
+// - Pinata (via pinata SDK v2.5.1 - VITE_PINATA_JWT, VITE_PINATA_GATEWAY)
 //   Usage: import { PinataSDK } from "pinata"
 //   const pinata = new PinataSDK({ pinataJwt, pinataGateway })
+//   Pin existing CID: await pinata.upload.public.cid(cid)
+//   Check pin status: await pinata.files.public.list().cid(cid)
 // - Fleek Platform (via @fleek-platform/sdk/browser - VITE_FLEEK_CLIENT_ID)
 //   Uses ApplicationAccessTokenService for client-side authentication
 // Users can configure which provider(s) to use via environment variables
@@ -341,6 +354,44 @@ EOF
 
 cat > apps/dao-dapp/src/services/encryption/.gitkeep <<'EOF'
 # Encryption service implementation
+EOF
+
+# Create IPFS test component scaffold (for Phase 1 testing)
+# This is a basic scaffold - full implementation is created during Phase 1
+cat > apps/dao-dapp/src/components/IPFSTest.tsx <<'EOF'
+import { useState, useEffect } from 'react'
+// IPFS service imports will be added during Phase 1 implementation
+// import { uploadToIPFS, getFromIPFS, stopHelia, pinCID } from '../services/ipfs'
+// import { checkPinningStatus } from '../services/ipfs/pinning'
+// import { getHelia } from '../services/ipfs'
+
+export default function IPFSTest() {
+  const [initializing, setInitializing] = useState(true)
+
+  useEffect(() => {
+    // IPFS initialization will be implemented during Phase 1
+    setInitializing(false)
+  }, [])
+
+  if (initializing) {
+    return (
+      <div className="rounded-2xl border border-white/5 bg-white/5 p-6 backdrop-blur">
+        <h2 className="text-xl font-semibold mb-4">IPFS Test</h2>
+        <p className="text-slate-400">Initializing IPFS node...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/5 bg-white/5 p-6 backdrop-blur">
+      <h2 className="text-xl font-semibold mb-4">IPFS Test (Helia)</h2>
+      <p className="text-slate-400 text-sm">
+        IPFS test component - will be fully implemented during Phase 1 of the learning path.
+        See: Docs/IPFS_IPNS learning/QUICKSTART_PHASE1.md
+      </p>
+    </div>
+  )
+}
 EOF
 
 cat > apps/dao-dapp/src/types/profile.ts <<'EOF'
@@ -867,7 +918,10 @@ export default [
         global: 'readonly',
         alert: 'readonly',
         TextEncoder: 'readonly',
-        TextDecoder: 'readonly'
+        TextDecoder: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        fetch: 'readonly'
       }
     },
     plugins: {
@@ -897,7 +951,10 @@ export default [
         global: 'readonly',
         alert: 'readonly',
         TextEncoder: 'readonly',
-        TextDecoder: 'readonly'
+        TextDecoder: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        fetch: 'readonly'
       }
     },
     plugins: {

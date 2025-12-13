@@ -358,6 +358,7 @@ EOF
 
 # Create IPFS test component scaffold (for Phase 1 testing)
 # This is a basic scaffold - full implementation is created during Phase 1
+mkdir -p apps/dao-dapp/src/components
 cat > apps/dao-dapp/src/components/IPFSTest.tsx <<'EOF'
 import { useState, useEffect } from 'react'
 // IPFS service imports will be added during Phase 1 implementation

@@ -4,6 +4,7 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 # setup.sh — Rookie-proof DApp bootstrap (Hardhat **v2** lane)
 # Frontend: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v4
+# State: Zustand v4 (global state) + Storacha account/space management store
 # Contracts: Hardhat v2 + @nomicfoundation/hardhat-toolbox (ethers v6) + TypeChain
 #            + hardhat-deploy + gas-reporter + contract-sizer + docgen + OpenZeppelin
 # DX: Foundry (Forge/Anvil), ESLint/Prettier/Solhint, Husky + lint-staged, Local Safety Net
@@ -119,6 +120,9 @@ pnpm --dir apps/dao-dapp add -D @types/react@18.3.12 @types/react-dom@18.3.1
 # Web3 + data
 pnpm --dir apps/dao-dapp add @rainbow-me/rainbowkit@~2.2.8 wagmi@~2.16.9 viem@~2.37.6 @tanstack/react-query@~5.90.2
 pnpm --dir apps/dao-dapp add @tanstack/react-query-devtools@~5.90.2 zod@~3.22.0
+
+# State management
+pnpm --dir apps/dao-dapp add zustand@^4.5.0
 
 # IPFS/IPNS - Helia (primary) + HTTP client (fallback) + IPNS support
 # Core IPFS implementation (Helia)
@@ -267,9 +271,9 @@ VITE_SEPOLIA_RPC=https://rpc.sepolia.org
 
 # IPFS/IPNS Configuration
 # Option 1: Storacha (Recommended for learning - free tier available)
-# Email-based authentication: Users must create account via CLI or console.storacha.network
-# After account creation, use client.login(email) in code
-VITE_STORACHA_EMAIL=
+# Email-based authentication: Users enter their email at runtime in the DApp
+# Users must create account via CLI (storacha login) or console.storacha.network
+# No environment variable needed - email is entered by user when logging in
 
 # Option 2: Pinata (Recommended for production - free tier available)
 # Get JWT from: https://app.pinata.cloud → API Keys → New Key
@@ -307,6 +311,7 @@ mkdir -p apps/dao-dapp/src/services/ipns
 mkdir -p apps/dao-dapp/src/services/encryption
 mkdir -p apps/dao-dapp/src/types
 mkdir -p apps/dao-dapp/src/utils
+mkdir -p apps/dao-dapp/src/stores
 
 # Create placeholder files for IPFS services
 # Note: IPFS pinning service is implemented in:
@@ -316,8 +321,8 @@ mkdir -p apps/dao-dapp/src/utils
 cat > apps/dao-dapp/src/services/ipfs/.gitkeep <<'EOF'
 # IPFS service implementation
 # Supports multiple pinning providers:
-# - Storacha (via @storacha/client - VITE_STORACHA_EMAIL)
-#   Email-based authentication: client.login(email) after account creation
+# - Storacha (via @storacha/client)
+#   Email-based authentication: Users enter email at runtime, use client.login(email) in code
 #   Requires account setup via CLI (storacha login) or console.storacha.network
 # - Pinata (via pinata SDK v2.5.1 - VITE_PINATA_JWT, VITE_PINATA_GATEWAY)
 #   Usage: pinata.upload.public.cid(cid) for pinning existing CIDs
@@ -330,10 +335,10 @@ EOF
 cat > apps/dao-dapp/src/services/ipfs/providers.ts <<'EOF'
 // IPFS provider configuration and selection
 // Supports multiple pinning providers:
-// - Storacha (via @storacha/client - VITE_STORACHA_EMAIL)
+// - Storacha (via @storacha/client)
 //   Usage: import { create } from "@storacha/client"
 //   const client = await create()
-//   const account = await client.login(email)
+//   const account = await client.login(email) // Email entered by user at runtime
 //   await account.plan.wait() // Wait for payment plan selection
 //   const space = await client.createSpace("my-space", { account })
 //   const cid = await client.uploadFile(file)
@@ -356,9 +361,288 @@ cat > apps/dao-dapp/src/services/encryption/.gitkeep <<'EOF'
 # Encryption service implementation
 EOF
 
+# Create example component showing Zustand store usage
+mkdir -p apps/dao-dapp/src/components
+cat > apps/dao-dapp/src/components/StorachaManager.tsx <<'EOF'
+import { useState } from 'react'
+import { useStorachaStore } from '../stores'
+
+/**
+ * Example component demonstrating Zustand store usage for Storacha account and space management
+ * This is a scaffold - implement actual Storacha SDK integration in your learning path
+ */
+export default function StorachaManager() {
+  const {
+    // State
+    currentAccount,
+    isAuthenticated,
+    accounts,
+    spaces,
+    selectedSpace,
+    spaceContents,
+    isLoading,
+    isLoadingSpaces,
+    isLoadingContents,
+    error,
+    // Actions
+    login,
+    logout,
+    switchAccount,
+    addAccount,
+    removeAccount,
+    fetchSpaces,
+    createSpace,
+    deleteSpace,
+    selectSpace,
+    uploadToSpace,
+    deleteFromSpace,
+    clearError,
+  } = useStorachaStore()
+
+  const [email, setEmail] = useState('')
+  const [newSpaceName, setNewSpaceName] = useState('')
+
+  const handleLogin = async () => {
+    if (!email) return
+    try {
+      await login(email)
+      await fetchSpaces()
+    } catch (err) {
+      console.error('Login failed:', err)
+    }
+  }
+
+  const handleLogout = () => {
+    logout()
+    setEmail('')
+  }
+
+  const handleSwitchAccount = async (accountId: string) => {
+    await switchAccount(accountId)
+  }
+
+  const handleCreateSpace = async () => {
+    if (!newSpaceName) return
+    try {
+      await createSpace(newSpaceName)
+      setNewSpaceName('')
+    } catch (err) {
+      console.error('Failed to create space:', err)
+    }
+  }
+
+  const handleDeleteSpace = async (spaceId: string) => {
+    if (!confirm('Are you sure you want to delete this space?')) return
+    try {
+      await deleteSpace(spaceId)
+    } catch (err) {
+      console.error('Failed to delete space:', err)
+    }
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !selectedSpace) return
+    try {
+      await uploadToSpace(selectedSpace.id, file)
+    } catch (err) {
+      console.error('Failed to upload file:', err)
+    }
+  }
+
+  const handleDeleteContent = async (contentId: string) => {
+    if (!selectedSpace) return
+    if (!confirm('Are you sure you want to delete this content?')) return
+    try {
+      await deleteFromSpace(selectedSpace.id, contentId)
+    } catch (err) {
+      console.error('Failed to delete content:', err)
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/5 bg-white/5 p-6 backdrop-blur">
+      <h2 className="text-xl font-semibold mb-4">Storacha Account Manager</h2>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <p className="text-red-400 text-sm">{error}</p>
+          <button
+            onClick={clearError}
+            className="mt-2 text-xs text-red-400 hover:text-red-300"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Authentication Section */}
+      <div className="mb-6">
+        <h3 className="text-lg font-medium mb-3">Authentication</h3>
+        {!isAuthenticated ? (
+          <div className="space-y-2">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your Storacha email"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-400"
+            />
+            <button
+              onClick={handleLogin}
+              disabled={isLoading || !email}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg"
+            >
+              {isLoading ? 'Logging in...' : 'Login'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-slate-400">
+              Logged in as: <span className="text-white">{currentAccount?.email}</span>
+            </p>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg"
+            >
+              Logout
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Multiple Accounts Section */}
+      {accounts.length > 1 && (
+        <div className="mb-6">
+          <h3 className="text-lg font-medium mb-3">Switch Account</h3>
+          <div className="space-y-2">
+            {accounts.map((account) => (
+              <button
+                key={account.id}
+                onClick={() => handleSwitchAccount(account.id)}
+                className={`w-full px-3 py-2 text-left rounded-lg border ${
+                  currentAccount?.id === account.id
+                    ? 'border-blue-500 bg-blue-500/10'
+                    : 'border-white/10 bg-white/5 hover:bg-white/10'
+                }`}
+              >
+                {account.email}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Spaces Section */}
+      {isAuthenticated && (
+        <div className="mb-6">
+          <h3 className="text-lg font-medium mb-3">Spaces</h3>
+          <div className="space-y-2 mb-3">
+            <input
+              type="text"
+              value={newSpaceName}
+              onChange={(e) => setNewSpaceName(e.target.value)}
+              placeholder="New space name"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-400"
+            />
+            <button
+              onClick={handleCreateSpace}
+              disabled={isLoadingSpaces || !newSpaceName}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg"
+            >
+              Create Space
+            </button>
+          </div>
+          {isLoadingSpaces ? (
+            <p className="text-slate-400 text-sm">Loading spaces...</p>
+          ) : spaces.length === 0 ? (
+            <p className="text-slate-400 text-sm">No spaces yet. Create one above!</p>
+          ) : (
+            <div className="space-y-2">
+              {spaces.map((space) => (
+                <div
+                  key={space.id}
+                  className={`p-3 rounded-lg border ${
+                    selectedSpace?.id === space.id
+                      ? 'border-blue-500 bg-blue-500/10'
+                      : 'border-white/10 bg-white/5 hover:bg-white/10'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => selectSpace(space)}
+                      className="flex-1 text-left"
+                    >
+                      <p className="font-medium">{space.name}</p>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSpace(space.id)}
+                      className="ml-2 px-2 py-1 text-xs bg-red-600 hover:bg-red-700 rounded"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Space Contents Section */}
+      {isAuthenticated && selectedSpace && (
+        <div>
+          <h3 className="text-lg font-medium mb-3">
+            Contents: {selectedSpace.name}
+          </h3>
+          <div className="mb-3">
+            <input
+              type="file"
+              onChange={handleFileUpload}
+              disabled={isLoadingContents}
+              className="text-sm text-slate-400"
+            />
+          </div>
+          {isLoadingContents ? (
+            <p className="text-slate-400 text-sm">Loading contents...</p>
+          ) : (
+            <div className="space-y-2">
+              {spaceContents[selectedSpace.id]?.length === 0 ? (
+                <p className="text-slate-400 text-sm">No contents yet. Upload a file above!</p>
+              ) : (
+                spaceContents[selectedSpace.id]?.map((content) => (
+                  <div
+                    key={content.id}
+                    className="p-3 rounded-lg border border-white/10 bg-white/5 flex items-center justify-between"
+                  >
+                    <div>
+                      <p className="font-medium">{content.name}</p>
+                      {content.size && (
+                        <p className="text-xs text-slate-400">
+                          {(content.size / 1024).toFixed(2)} KB
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleDeleteContent(content.id)}
+                      className="ml-2 px-2 py-1 text-xs bg-red-600 hover:bg-red-700 rounded"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+EOF
+
 # Create IPFS test component scaffold (for Phase 1 testing)
 # This is a basic scaffold - full implementation is created during Phase 1
-mkdir -p apps/dao-dapp/src/components
 cat > apps/dao-dapp/src/components/IPFSTest.tsx <<'EOF'
 import { useState, useEffect } from 'react'
 // IPFS service imports will be added during Phase 1 implementation
@@ -398,6 +682,392 @@ EOF
 cat > apps/dao-dapp/src/types/profile.ts <<'EOF'
 // Profile type definitions
 // Will be implemented in learning path Phase 4
+EOF
+
+# Storacha types
+cat > apps/dao-dapp/src/types/storacha.ts <<'EOF'
+// Storacha account and space type definitions
+// These types match the @storacha/client SDK structure
+
+export interface StorachaAccount {
+  id: string
+  email: string
+  // Add other account properties as needed based on @storacha/client SDK
+}
+
+export interface StorachaSpace {
+  id: string
+  name: string
+  // Add other space properties as needed based on @storacha/client SDK
+}
+
+export interface StorachaContent {
+  id: string
+  name: string
+  cid?: string
+  size?: number
+  type?: string
+  // Add other content properties as needed based on @storacha/client SDK
+}
+EOF
+
+# Zustand store for Storacha account and space management
+cat > apps/dao-dapp/src/stores/useStorachaStore.ts <<'EOF'
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import type { StorachaAccount, StorachaSpace, StorachaContent } from '../types/storacha'
+
+interface StorachaStore {
+  // Authentication state
+  currentAccount: StorachaAccount | null
+  isAuthenticated: boolean
+  accounts: StorachaAccount[] // Multiple accounts user can switch between
+  isLoading: boolean
+  error: string | null
+
+  // Spaces state
+  spaces: StorachaSpace[]
+  selectedSpace: StorachaSpace | null
+  isLoadingSpaces: boolean
+
+  // Space contents state
+  spaceContents: Record<string, StorachaContent[]> // spaceId -> contents
+  isLoadingContents: boolean
+
+  // Authentication actions
+  login: (email: string) => Promise<void>
+  logout: () => void
+  switchAccount: (accountId: string) => Promise<void>
+  addAccount: (account: StorachaAccount) => void
+  removeAccount: (accountId: string) => void
+
+  // Spaces actions
+  fetchSpaces: () => Promise<void>
+  createSpace: (name: string) => Promise<void>
+  deleteSpace: (spaceId: string) => Promise<void>
+  selectSpace: (space: StorachaSpace | null) => void
+
+  // Space contents actions
+  fetchSpaceContents: (spaceId: string) => Promise<void>
+  uploadToSpace: (spaceId: string, file: File) => Promise<void>
+  deleteFromSpace: (spaceId: string, contentId: string) => Promise<void>
+
+  // Utility actions
+  clearError: () => void
+  reset: () => void
+}
+
+const initialState = {
+  currentAccount: null,
+  isAuthenticated: false,
+  accounts: [],
+  isLoading: false,
+  error: null,
+  spaces: [],
+  selectedSpace: null,
+  isLoadingSpaces: false,
+  spaceContents: {},
+  isLoadingContents: false,
+}
+
+export const useStorachaStore = create<StorachaStore>()(
+  persist(
+    (set, get) => ({
+      ...initialState,
+
+      // Authentication actions
+      login: async (email: string) => {
+        set({ isLoading: true, error: null })
+        try {
+          // TODO: Implement actual Storacha login
+          // import { create } from '@storacha/client'
+          // const client = await create()
+          // const account = await client.login(email)
+          
+          // For now, create a mock account
+          const account: StorachaAccount = {
+            id: `account-${Date.now()}`,
+            email,
+          }
+
+          set((state) => ({
+            currentAccount: account,
+            isAuthenticated: true,
+            accounts: state.accounts.some((a) => a.id === account.id)
+              ? state.accounts
+              : [...state.accounts, account],
+            isLoading: false,
+            error: null,
+          }))
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Login failed',
+          })
+          throw error
+        }
+      },
+
+      logout: () => {
+        set({
+          currentAccount: null,
+          isAuthenticated: false,
+          selectedSpace: null,
+          spaces: [],
+          spaceContents: {},
+        })
+      },
+
+      switchAccount: async (accountId: string) => {
+        const account = get().accounts.find((a) => a.id === accountId)
+        if (!account) {
+          set({ error: 'Account not found' })
+          return
+        }
+
+        set({
+          currentAccount: account,
+          isAuthenticated: true,
+          selectedSpace: null,
+          spaces: [],
+          spaceContents: {},
+        })
+
+        // Automatically fetch spaces for the new account
+        await get().fetchSpaces()
+      },
+
+      addAccount: (account: StorachaAccount) => {
+        set((state) => ({
+          accounts: state.accounts.some((a) => a.id === account.id)
+            ? state.accounts
+            : [...state.accounts, account],
+        }))
+      },
+
+      removeAccount: (accountId: string) => {
+        set((state) => {
+          const newAccounts = state.accounts.filter((a) => a.id !== accountId)
+          const isCurrentAccount = state.currentAccount?.id === accountId
+          return {
+            accounts: newAccounts,
+            currentAccount: isCurrentAccount ? null : state.currentAccount,
+            isAuthenticated: isCurrentAccount ? false : state.isAuthenticated,
+            selectedSpace: isCurrentAccount ? null : state.selectedSpace,
+            spaces: isCurrentAccount ? [] : state.spaces,
+            spaceContents: isCurrentAccount ? {} : state.spaceContents,
+          }
+        })
+      },
+
+      // Spaces actions
+      fetchSpaces: async () => {
+        const { currentAccount } = get()
+        if (!currentAccount) {
+          set({ error: 'No account selected' })
+          return
+        }
+
+        set({ isLoadingSpaces: true, error: null })
+        try {
+          // TODO: Implement actual Storacha spaces fetching
+          // const client = await create()
+          // const account = await client.login(currentAccount.email)
+          // const spaces = await account.listSpaces()
+          
+          // For now, return empty array
+          const spaces: StorachaSpace[] = []
+
+          set({ spaces, isLoadingSpaces: false })
+        } catch (error) {
+          set({
+            isLoadingSpaces: false,
+            error: error instanceof Error ? error.message : 'Failed to fetch spaces',
+          })
+        }
+      },
+
+      createSpace: async (name: string) => {
+        const { currentAccount } = get()
+        if (!currentAccount) {
+          set({ error: 'No account selected' })
+          return
+        }
+
+        set({ isLoadingSpaces: true, error: null })
+        try {
+          // TODO: Implement actual Storacha space creation
+          // const client = await create()
+          // const account = await client.login(currentAccount.email)
+          // const space = await client.createSpace(name, { account })
+          
+          // For now, create a mock space
+          const newSpace: StorachaSpace = {
+            id: `space-${Date.now()}`,
+            name,
+          }
+
+          set((state) => ({
+            spaces: [...state.spaces, newSpace],
+            isLoadingSpaces: false,
+          }))
+        } catch (error) {
+          set({
+            isLoadingSpaces: false,
+            error: error instanceof Error ? error.message : 'Failed to create space',
+          })
+          throw error
+        }
+      },
+
+      deleteSpace: async (spaceId: string) => {
+        set({ isLoadingSpaces: true, error: null })
+        try {
+          // TODO: Implement actual Storacha space deletion
+          // const client = await create()
+          // const account = await client.login(get().currentAccount!.email)
+          // await account.deleteSpace(spaceId)
+
+          set((state) => {
+            const newSpaces = state.spaces.filter((s) => s.id !== spaceId)
+            const newContents = { ...state.spaceContents }
+            delete newContents[spaceId]
+            return {
+              spaces: newSpaces,
+              selectedSpace: state.selectedSpace?.id === spaceId ? null : state.selectedSpace,
+              spaceContents: newContents,
+              isLoadingSpaces: false,
+            }
+          })
+        } catch (error) {
+          set({
+            isLoadingSpaces: false,
+            error: error instanceof Error ? error.message : 'Failed to delete space',
+          })
+          throw error
+        }
+      },
+
+      selectSpace: (space: StorachaSpace | null) => {
+        set({ selectedSpace: space })
+        if (space) {
+          // Automatically fetch contents when space is selected
+          get().fetchSpaceContents(space.id)
+        }
+      },
+
+      // Space contents actions
+      fetchSpaceContents: async (spaceId: string) => {
+        set({ isLoadingContents: true, error: null })
+        try {
+          // TODO: Implement actual Storacha contents fetching
+          // const client = await create()
+          // const account = await client.login(get().currentAccount!.email)
+          // const contents = await account.listSpaceContents(spaceId)
+          
+          // For now, return empty array
+          const contents: StorachaContent[] = []
+
+          set((state) => ({
+            spaceContents: {
+              ...state.spaceContents,
+              [spaceId]: contents,
+            },
+            isLoadingContents: false,
+          }))
+        } catch (error) {
+          set({
+            isLoadingContents: false,
+            error: error instanceof Error ? error.message : 'Failed to fetch space contents',
+          })
+        }
+      },
+
+      uploadToSpace: async (spaceId: string, file: File) => {
+        set({ isLoadingContents: true, error: null })
+        try {
+          // TODO: Implement actual Storacha file upload
+          // const client = await create()
+          // const account = await client.login(get().currentAccount!.email)
+          // const cid = await client.uploadFile(file, { spaceId })
+          
+          // For now, create a mock content
+          const newContent: StorachaContent = {
+            id: `content-${Date.now()}`,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+          }
+
+          set((state) => ({
+            spaceContents: {
+              ...state.spaceContents,
+              [spaceId]: [...(state.spaceContents[spaceId] || []), newContent],
+            },
+            isLoadingContents: false,
+          }))
+        } catch (error) {
+          set({
+            isLoadingContents: false,
+            error: error instanceof Error ? error.message : 'Failed to upload file',
+          })
+          throw error
+        }
+      },
+
+      deleteFromSpace: async (spaceId: string, contentId: string) => {
+        set({ isLoadingContents: true, error: null })
+        try {
+          // TODO: Implement actual Storacha content deletion
+          // const client = await create()
+          // const account = await client.login(get().currentAccount!.email)
+          // await account.deleteContent(spaceId, contentId)
+
+          set((state) => ({
+            spaceContents: {
+              ...state.spaceContents,
+              [spaceId]: (state.spaceContents[spaceId] || []).filter(
+                (c) => c.id !== contentId
+              ),
+            },
+            isLoadingContents: false,
+          }))
+        } catch (error) {
+          set({
+            isLoadingContents: false,
+            error: error instanceof Error ? error.message : 'Failed to delete content',
+          })
+          throw error
+        }
+      },
+
+      // Utility actions
+      clearError: () => {
+        set({ error: null })
+      },
+
+      reset: () => {
+        set(initialState)
+      },
+    }),
+    {
+      name: 'storacha-storage', // localStorage key
+      partialize: (state) => ({
+        // Only persist authentication state, not loading/error states
+        currentAccount: state.currentAccount,
+        isAuthenticated: state.isAuthenticated,
+        accounts: state.accounts,
+        selectedSpace: state.selectedSpace,
+      }),
+    }
+  )
+)
+EOF
+
+# Store index file
+cat > apps/dao-dapp/src/stores/index.ts <<'EOF'
+// Export all stores from a single entry point
+export { useStorachaStore } from './useStorachaStore'
 EOF
 
 cat > apps/dao-dapp/src/utils/deviceCapabilities.ts <<'EOF'
@@ -1147,6 +1817,7 @@ cat > README.md <<'EOF'
 # DApp Setup (Rookie-friendly)
 
 **Frontend**: Vite + React 18 + RainbowKit v2 + wagmi v2 + viem + TanStack Query v5 + Tailwind v4  
+**State Management**: Zustand v4 (global state) with Storacha account/space management store  
 **IPFS/IPNS**: Helia v2 (full IPFS node) + @helia/unixfs + @helia/ipns + @libp2p/crypto + @noble/curves  
 **IPFS Pinning**: Storacha SDK, Pinata SDK, or Fleek Platform SDK (choose one or multiple)  
 **Contracts**: Hardhat v2 + @nomicfoundation/hardhat-toolbox (ethers v6), OpenZeppelin, TypeChain, hardhat-deploy  
@@ -1167,15 +1838,15 @@ After setup completes, you'll need to configure your environment files:
 - Add your `VITE_WALLETCONNECT_ID` (get one free from [WalletConnect Cloud](https://cloud.walletconnect.com))
 - Add RPC URLs for the networks you want to use (defaults are provided)
 - **IPFS/IPNS Configuration** (choose one or multiple pinning services):
-  - `VITE_STORACHA_EMAIL` - Your email for [Storacha](https://storacha.network) (free tier available)
+  - **Storacha** - [Storacha](https://storacha.network) (free tier available)
     - **Setup Steps (pnpm-first):**
       1. Install CLI: `pnpm dlx @storacha/cli@latest`
       2. Create account: `storacha login your@email.com` (check email for verification link)
       3. Select a plan (Free tier available) after email verification
       4. Create a Space: `storacha space create my-space` (or use JS client in code)
-      5. Add your email to `.env.local` as `VITE_STORACHA_EMAIL`
     - **Alternative:** Use web console at https://console.storacha.network
-    - **In Code:** Use `@storacha/client` - `const client = await create(); await client.login(email)`
+    - **In Code:** Users enter their email at runtime in the DApp. Use `@storacha/client` - `const client = await create(); await client.login(email)`
+    - **Note:** No environment variable needed - email is entered by users when logging in through the DApp UI
   - `VITE_PINATA_JWT` - Get from [Pinata](https://app.pinata.cloud) → API Keys → New Key (free tier available)
   - `VITE_PINATA_GATEWAY` - Get from [Pinata](https://app.pinata.cloud) → Gateways (format: fun-llama-300.mypinata.cloud)
   - `VITE_FLEEK_CLIENT_ID` - Get from [Fleek Platform](https://app.fleek.co) → Create Application → Get Client ID
@@ -1294,6 +1965,56 @@ pnpm check:contracts  # Compile and test contracts
 ```
 
 > 💡 **Note:** These checks run automatically via Husky hooks (pre-commit and pre-push), but you can also run them manually anytime!
+
+### State Management with Zustand
+
+This project uses **Zustand** for global state management. A pre-configured store is included for managing Storacha accounts and spaces.
+
+**Storacha Store Features:**
+- **Authentication**: Login/logout, multiple account support, account switching
+- **Spaces Management**: Create, delete, list spaces
+- **Space Contents**: Upload, delete, list files within spaces
+- **Persistent State**: Authentication state persists across page refreshes (localStorage)
+- **TypeScript Support**: Fully typed store with TypeScript interfaces
+
+**Using the Storacha Store:**
+
+```tsx
+import { useStorachaStore } from '../stores'
+
+function MyComponent() {
+  // Access state
+  const { currentAccount, isAuthenticated, spaces, selectedSpace } = useStorachaStore()
+  
+  // Access actions
+  const { login, logout, fetchSpaces, createSpace, selectSpace } = useStorachaStore()
+  
+  // Use in your component
+  return (
+    <div>
+      {isAuthenticated ? (
+        <p>Logged in as: {currentAccount?.email}</p>
+      ) : (
+        <button onClick={() => login('user@example.com')}>Login</button>
+      )}
+    </div>
+  )
+}
+```
+
+**Example Component:**
+See `apps/dao-dapp/src/components/StorachaManager.tsx` for a complete example showing:
+- Login/logout functionality
+- Multiple account switching
+- Space creation and management
+- File upload and content management
+
+**Store Location:**
+- Store definition: `apps/dao-dapp/src/stores/useStorachaStore.ts`
+- Type definitions: `apps/dao-dapp/src/types/storacha.ts`
+- Store exports: `apps/dao-dapp/src/stores/index.ts`
+
+> 💡 **Note:** The store includes TODO comments where you need to integrate the actual `@storacha/client` SDK. The structure is ready - you just need to replace the mock implementations with real Storacha API calls.
 
 ### Working with Contracts
 
@@ -1423,8 +2144,8 @@ echo "Next:"
 echo "1) Edit apps/dao-dapp/.env.local"
 echo "   - Add your VITE_WALLETCONNECT_ID (get one free from https://cloud.walletconnect.com)"
 echo "   - Add IPFS/IPNS configuration (choose one or multiple):"
-echo "     * VITE_STORACHA_EMAIL (your email for Storacha - create account first:"
-echo "       pnpm dlx @storacha/cli@latest && storacha login your@email.com) OR"
+echo "     * Storacha: No env var needed - users enter email at runtime in DApp"
+echo "       (Create account first: pnpm dlx @storacha/cli@latest && storacha login your@email.com) OR"
 echo "     * VITE_PINATA_JWT (get from https://app.pinata.cloud → API Keys → New Key)"
 echo "     * VITE_PINATA_GATEWAY (get from https://app.pinata.cloud → Gateways) OR"
 echo "     * VITE_FLEEK_CLIENT_ID (get from https://app.fleek.co → Create Application → Get Client ID)"
@@ -1494,8 +2215,7 @@ echo "     * Name: VITE_ARBITRUM_RPC"
 echo "       Value: https://arbitrum.publicnode.com (or your custom RPC)"
 echo "     * Name: VITE_SEPOLIA_RPC"
 echo "       Value: https://rpc.sepolia.org (or your custom RPC)"
-echo "     * Name: VITE_STORACHA_EMAIL"
-echo "       Value: (your email - create account first: pnpm dlx @storacha/cli@latest && storacha login your@email.com)"
+echo "     * Note: Storacha - No env var needed (users enter email at runtime in DApp)"
 echo "       OR"
 echo "     * Name: VITE_PINATA_JWT"
 echo "       Value: (get from https://app.pinata.cloud → API Keys → New Key)"
@@ -1531,7 +2251,8 @@ echo "     * If website deploys but shows blank page:"
 echo "       → Go to Settings → Environment Variables"
 echo "       → Make sure all VITE_* variables are added:"
 echo "         - VITE_WALLETCONNECT_ID (required)"
-echo "         - VITE_STORACHA_EMAIL or (VITE_PINATA_JWT + VITE_PINATA_GATEWAY) or VITE_FLEEK_CLIENT_ID (for IPFS)"
+echo "         - (VITE_PINATA_JWT + VITE_PINATA_GATEWAY) or VITE_FLEEK_CLIENT_ID (for IPFS pinning)"
+echo "         - Note: Storacha doesn't need env vars (users enter email at runtime)"
 echo "         - All RPC URLs (required for blockchain connections)"
 echo "       → Redeploy after adding missing variables"
 echo "     * If you see 'Unsupported engine' or wrong Node version:"

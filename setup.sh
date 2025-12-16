@@ -364,7 +364,7 @@ EOF
 # Create example component showing Zustand store usage
 mkdir -p apps/dao-dapp/src/components
 cat > apps/dao-dapp/src/components/StorachaManager.tsx <<'EOF'
-import { useState } from 'react'
+import { useState, type ChangeEvent } from 'react'
 import { useStorachaStore } from '../stores'
 
 /**
@@ -388,8 +388,6 @@ export default function StorachaManager() {
     login,
     logout,
     switchAccount,
-    addAccount,
-    removeAccount,
     fetchSpaces,
     createSpace,
     deleteSpace,
@@ -440,7 +438,7 @@ export default function StorachaManager() {
     }
   }
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !selectedSpace) return
     try {
@@ -818,8 +816,8 @@ export const useStorachaStore = create<StorachaStore>()(
         })
       },
 
-      switchAccount: async (accountId: string) => {
-        const account = get().accounts.find((a) => a.id === accountId)
+      switchAccount: async (_accountId: string) => {
+        const account = get().accounts.find((a) => a.id === _accountId)
         if (!account) {
           set({ error: 'Account not found' })
           return
@@ -837,18 +835,18 @@ export const useStorachaStore = create<StorachaStore>()(
         await get().fetchSpaces()
       },
 
-      addAccount: (account: StorachaAccount) => {
+      addAccount: (_account: StorachaAccount) => {
         set((state) => ({
-          accounts: state.accounts.some((a) => a.id === account.id)
+          accounts: state.accounts.some((a) => a.id === _account.id)
             ? state.accounts
-            : [...state.accounts, account],
+            : [...state.accounts, _account],
         }))
       },
 
-      removeAccount: (accountId: string) => {
+      removeAccount: (_accountId: string) => {
         set((state) => {
-          const newAccounts = state.accounts.filter((a) => a.id !== accountId)
-          const isCurrentAccount = state.currentAccount?.id === accountId
+          const newAccounts = state.accounts.filter((a) => a.id !== _accountId)
+          const isCurrentAccount = state.currentAccount?.id === _accountId
           return {
             accounts: newAccounts,
             currentAccount: isCurrentAccount ? null : state.currentAccount,
@@ -887,7 +885,7 @@ export const useStorachaStore = create<StorachaStore>()(
         }
       },
 
-      createSpace: async (name: string) => {
+      createSpace: async (_name: string) => {
         const { currentAccount } = get()
         if (!currentAccount) {
           set({ error: 'No account selected' })
@@ -899,12 +897,12 @@ export const useStorachaStore = create<StorachaStore>()(
           // TODO: Implement actual Storacha space creation
           // const client = await create()
           // const account = await client.login(currentAccount.email)
-          // const space = await client.createSpace(name, { account })
+          // const space = await client.createSpace(_name, { account })
           
           // For now, create a mock space
           const newSpace: StorachaSpace = {
             id: `space-${Date.now()}`,
-            name,
+            name: _name,
           }
 
           set((state) => ({
@@ -920,21 +918,21 @@ export const useStorachaStore = create<StorachaStore>()(
         }
       },
 
-      deleteSpace: async (spaceId: string) => {
+      deleteSpace: async (_spaceId: string) => {
         set({ isLoadingSpaces: true, error: null })
         try {
           // TODO: Implement actual Storacha space deletion
           // const client = await create()
           // const account = await client.login(get().currentAccount!.email)
-          // await account.deleteSpace(spaceId)
+          // await account.deleteSpace(_spaceId)
 
           set((state) => {
-            const newSpaces = state.spaces.filter((s) => s.id !== spaceId)
+            const newSpaces = state.spaces.filter((s) => s.id !== _spaceId)
             const newContents = { ...state.spaceContents }
-            delete newContents[spaceId]
+            delete newContents[_spaceId]
             return {
               spaces: newSpaces,
-              selectedSpace: state.selectedSpace?.id === spaceId ? null : state.selectedSpace,
+              selectedSpace: state.selectedSpace?.id === _spaceId ? null : state.selectedSpace,
               spaceContents: newContents,
               isLoadingSpaces: false,
             }
@@ -948,22 +946,22 @@ export const useStorachaStore = create<StorachaStore>()(
         }
       },
 
-      selectSpace: (space: StorachaSpace | null) => {
-        set({ selectedSpace: space })
-        if (space) {
+      selectSpace: (_space: StorachaSpace | null) => {
+        set({ selectedSpace: _space })
+        if (_space) {
           // Automatically fetch contents when space is selected
-          get().fetchSpaceContents(space.id)
+          get().fetchSpaceContents(_space.id)
         }
       },
 
       // Space contents actions
-      fetchSpaceContents: async (spaceId: string) => {
+      fetchSpaceContents: async (_spaceId: string) => {
         set({ isLoadingContents: true, error: null })
         try {
           // TODO: Implement actual Storacha contents fetching
           // const client = await create()
           // const account = await client.login(get().currentAccount!.email)
-          // const contents = await account.listSpaceContents(spaceId)
+          // const contents = await account.listSpaceContents(_spaceId)
           
           // For now, return empty array
           const contents: StorachaContent[] = []
@@ -971,7 +969,7 @@ export const useStorachaStore = create<StorachaStore>()(
           set((state) => ({
             spaceContents: {
               ...state.spaceContents,
-              [spaceId]: contents,
+              [_spaceId]: contents,
             },
             isLoadingContents: false,
           }))
@@ -983,26 +981,26 @@ export const useStorachaStore = create<StorachaStore>()(
         }
       },
 
-      uploadToSpace: async (spaceId: string, file: File) => {
+      uploadToSpace: async (_spaceId: string, _file: File) => {
         set({ isLoadingContents: true, error: null })
         try {
           // TODO: Implement actual Storacha file upload
           // const client = await create()
           // const account = await client.login(get().currentAccount!.email)
-          // const cid = await client.uploadFile(file, { spaceId })
+          // const cid = await client.uploadFile(_file, { spaceId: _spaceId })
           
           // For now, create a mock content
           const newContent: StorachaContent = {
             id: `content-${Date.now()}`,
-            name: file.name,
-            size: file.size,
-            type: file.type,
+            name: _file.name,
+            size: _file.size,
+            type: _file.type,
           }
 
           set((state) => ({
             spaceContents: {
               ...state.spaceContents,
-              [spaceId]: [...(state.spaceContents[spaceId] || []), newContent],
+              [_spaceId]: [...(state.spaceContents[_spaceId] || []), newContent],
             },
             isLoadingContents: false,
           }))
@@ -1015,19 +1013,19 @@ export const useStorachaStore = create<StorachaStore>()(
         }
       },
 
-      deleteFromSpace: async (spaceId: string, contentId: string) => {
+      deleteFromSpace: async (_spaceId: string, _contentId: string) => {
         set({ isLoadingContents: true, error: null })
         try {
           // TODO: Implement actual Storacha content deletion
           // const client = await create()
           // const account = await client.login(get().currentAccount!.email)
-          // await account.deleteContent(spaceId, contentId)
+          // await account.deleteContent(_spaceId, _contentId)
 
           set((state) => ({
             spaceContents: {
               ...state.spaceContents,
-              [spaceId]: (state.spaceContents[spaceId] || []).filter(
-                (c) => c.id !== contentId
+              [_spaceId]: (state.spaceContents[_spaceId] || []).filter(
+                (c) => c.id !== _contentId
               ),
             },
             isLoadingContents: false,
@@ -1588,6 +1586,7 @@ export default [
         Buffer: 'readonly',
         global: 'readonly',
         alert: 'readonly',
+        confirm: 'readonly',
         TextEncoder: 'readonly',
         TextDecoder: 'readonly',
         setTimeout: 'readonly',
@@ -1621,11 +1620,14 @@ export default [
         Buffer: 'readonly',
         global: 'readonly',
         alert: 'readonly',
+        confirm: 'readonly',
         TextEncoder: 'readonly',
         TextDecoder: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
-        fetch: 'readonly'
+        fetch: 'readonly',
+        File: 'readonly',
+        HTMLInputElement: 'readonly'
       }
     },
     plugins: {
@@ -1633,7 +1635,16 @@ export default [
       '@typescript-eslint': tseslint
     },
     rules: {
-      ...reactHooks.configs.recommended.rules
+      ...reactHooks.configs.recommended.rules,
+      'no-unused-vars': 'off', // Turn off base rule as it conflicts with TypeScript
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          ignoreRestSiblings: true
+        }
+      ]
     }
   },
   {

@@ -777,26 +777,13 @@ export const useStorachaStore = create<StorachaStore>()(
       login: async (email: string) => {
         set({ isLoading: true, error: null })
         try {
-          // TODO: Implement actual Storacha login
+          // Implement Storacha login
           // import { create } from '@storacha/client'
           // const client = await create()
           // const account = await client.login(email)
+          // await account.plan.wait() // Wait for payment plan selection if needed
           
-          // For now, create a mock account
-          const account: StorachaAccount = {
-            id: `account-${Date.now()}`,
-            email,
-          }
-
-          set((state) => ({
-            currentAccount: account,
-            isAuthenticated: true,
-            accounts: state.accounts.some((a) => a.id === account.id)
-              ? state.accounts
-              : [...state.accounts, account],
-            isLoading: false,
-            error: null,
-          }))
+          throw new Error('Storacha login not implemented. Please integrate @storacha/client SDK.')
         } catch (error) {
           set({
             isLoading: false,
@@ -868,15 +855,12 @@ export const useStorachaStore = create<StorachaStore>()(
 
         set({ isLoadingSpaces: true, error: null })
         try {
-          // TODO: Implement actual Storacha spaces fetching
+          // Implement Storacha spaces fetching
           // const client = await create()
           // const account = await client.login(currentAccount.email)
           // const spaces = await account.listSpaces()
           
-          // For now, return empty array
-          const spaces: StorachaSpace[] = []
-
-          set({ spaces, isLoadingSpaces: false })
+          throw new Error('Storacha spaces fetching not implemented. Please integrate @storacha/client SDK.')
         } catch (error) {
           set({
             isLoadingSpaces: false,
@@ -894,21 +878,12 @@ export const useStorachaStore = create<StorachaStore>()(
 
         set({ isLoadingSpaces: true, error: null })
         try {
-          // TODO: Implement actual Storacha space creation
+          // Implement Storacha space creation
           // const client = await create()
           // const account = await client.login(currentAccount.email)
           // const space = await client.createSpace(_name, { account })
           
-          // For now, create a mock space
-          const newSpace: StorachaSpace = {
-            id: `space-${Date.now()}`,
-            name: _name,
-          }
-
-          set((state) => ({
-            spaces: [...state.spaces, newSpace],
-            isLoadingSpaces: false,
-          }))
+          throw new Error('Storacha space creation not implemented. Please integrate @storacha/client SDK.')
         } catch (error) {
           set({
             isLoadingSpaces: false,
@@ -921,22 +896,12 @@ export const useStorachaStore = create<StorachaStore>()(
       deleteSpace: async (_spaceId: string) => {
         set({ isLoadingSpaces: true, error: null })
         try {
-          // TODO: Implement actual Storacha space deletion
+          // Implement Storacha space deletion
           // const client = await create()
           // const account = await client.login(get().currentAccount!.email)
           // await account.deleteSpace(_spaceId)
-
-          set((state) => {
-            const newSpaces = state.spaces.filter((s) => s.id !== _spaceId)
-            const newContents = { ...state.spaceContents }
-            delete newContents[_spaceId]
-            return {
-              spaces: newSpaces,
-              selectedSpace: state.selectedSpace?.id === _spaceId ? null : state.selectedSpace,
-              spaceContents: newContents,
-              isLoadingSpaces: false,
-            }
-          })
+          
+          throw new Error('Storacha space deletion not implemented. Please integrate @storacha/client SDK.')
         } catch (error) {
           set({
             isLoadingSpaces: false,
@@ -958,21 +923,12 @@ export const useStorachaStore = create<StorachaStore>()(
       fetchSpaceContents: async (_spaceId: string) => {
         set({ isLoadingContents: true, error: null })
         try {
-          // TODO: Implement actual Storacha contents fetching
+          // Implement Storacha contents fetching
           // const client = await create()
           // const account = await client.login(get().currentAccount!.email)
           // const contents = await account.listSpaceContents(_spaceId)
           
-          // For now, return empty array
-          const contents: StorachaContent[] = []
-
-          set((state) => ({
-            spaceContents: {
-              ...state.spaceContents,
-              [_spaceId]: contents,
-            },
-            isLoadingContents: false,
-          }))
+          throw new Error('Storacha contents fetching not implemented. Please integrate @storacha/client SDK.')
         } catch (error) {
           set({
             isLoadingContents: false,
@@ -984,26 +940,12 @@ export const useStorachaStore = create<StorachaStore>()(
       uploadToSpace: async (_spaceId: string, _file: File) => {
         set({ isLoadingContents: true, error: null })
         try {
-          // TODO: Implement actual Storacha file upload
+          // Implement Storacha file upload
           // const client = await create()
           // const account = await client.login(get().currentAccount!.email)
           // const cid = await client.uploadFile(_file, { spaceId: _spaceId })
           
-          // For now, create a mock content
-          const newContent: StorachaContent = {
-            id: `content-${Date.now()}`,
-            name: _file.name,
-            size: _file.size,
-            type: _file.type,
-          }
-
-          set((state) => ({
-            spaceContents: {
-              ...state.spaceContents,
-              [_spaceId]: [...(state.spaceContents[_spaceId] || []), newContent],
-            },
-            isLoadingContents: false,
-          }))
+          throw new Error('Storacha file upload not implemented. Please integrate @storacha/client SDK.')
         } catch (error) {
           set({
             isLoadingContents: false,
@@ -1016,20 +958,12 @@ export const useStorachaStore = create<StorachaStore>()(
       deleteFromSpace: async (_spaceId: string, _contentId: string) => {
         set({ isLoadingContents: true, error: null })
         try {
-          // TODO: Implement actual Storacha content deletion
+          // Implement Storacha content deletion
           // const client = await create()
           // const account = await client.login(get().currentAccount!.email)
           // await account.deleteContent(_spaceId, _contentId)
-
-          set((state) => ({
-            spaceContents: {
-              ...state.spaceContents,
-              [_spaceId]: (state.spaceContents[_spaceId] || []).filter(
-                (c) => c.id !== _contentId
-              ),
-            },
-            isLoadingContents: false,
-          }))
+          
+          throw new Error('Storacha content deletion not implemented. Please integrate @storacha/client SDK.')
         } catch (error) {
           set({
             isLoadingContents: false,
@@ -2025,7 +1959,7 @@ See `apps/dao-dapp/src/components/StorachaManager.tsx` for a complete example sh
 - Type definitions: `apps/dao-dapp/src/types/storacha.ts`
 - Store exports: `apps/dao-dapp/src/stores/index.ts`
 
-> 💡 **Note:** The store includes TODO comments where you need to integrate the actual `@storacha/client` SDK. The structure is ready - you just need to replace the mock implementations with real Storacha API calls.
+> 💡 **Note:** The store includes implementation placeholders where you need to integrate the actual `@storacha/client` SDK. The structure is ready - you just need to implement the Storacha API calls following the commented examples in each function.
 
 ### Working with Contracts
 

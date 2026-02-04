@@ -13,7 +13,7 @@ This document is the **single source of truth** for the desired tech stack. Use 
 - **React 18** — UI library.
 - **TypeScript** — Strict mode enabled; full type coverage. Target modern ES (e.g. ES2020+).
 - **Vite** — Build tool and dev server (use current stable major: 5 or 6). Output is a **static SPA** (no SSR, no server runtime).
-- **React Router DOM 6** — Client-side routing only (BrowserRouter; consider hash-based routing if deploying to static hosts with SPA fallback).
+- **React Router DOM 6** — Client-side routing only. Use **BrowserRouter** (HTML5 history API) for clean URLs (e.g. `/organization/0x123`). For this to work on static hosting (Fleek, IPFS, Vercel, Netlify), the app must include a **`_redirects`** file (or the host’s equivalent) so every path is served `index.html`; otherwise refresh or direct links to deep routes return 404. Prefer this over hash-based routing (`HashRouter`), which works without host config but gives URLs with `#`.
 - **Module system**: ESM (`"type": "module"`). JSX: React JSX transform (`react-jsx`). Module resolution: bundler.
 
 ---
@@ -95,7 +95,7 @@ This document is the **single source of truth** for the desired tech stack. Use 
 
 - **Code splitting** — Use Vite’s Rollup options to define **manual chunks** for better caching and load: e.g. separate chunks for `vendor` (react, react-dom, etc.), `wagmi`, `rainbowkit`, and optionally `viem`. This matches the “manual chunks for vendor, wagmi, rainbowkit” approach and improves long-term cache hits.
 - **Tree shaking** — Enabled via Vite’s build optimization; use ESM imports so unused code is dropped.
-- **Build output** — Production build to `dist/` (or equivalent). SPA: configure server or static host (e.g. `_redirects`, `index.html` fallback) for client-side routing.
+- **Build output** — Production build to `dist/` (or equivalent). The app is a **SPA (single-page application)**: one HTML shell; routing is client-side (React Router). Include a **`_redirects`** file in the build output (or the static host’s equivalent, e.g. Netlify/Fleek `_redirects`, Vercel rewrites) so that every path serves `index.html`. That way BrowserRouter works on refresh and deep links; without it, history-based routing breaks on static hosts.
 
 ---
 
@@ -138,7 +138,7 @@ This document is the **single source of truth** for the desired tech stack. Use 
 
 ## 14. Deployment & hosting
 
-- **Frontend** — Build output (`dist/`) deployable to any static host or CDN (e.g. Fleek, Vercel, Netlify, IPFS gateways). Hash-based routing or server redirects for SPA if needed.
+- **Frontend** — Build output (`dist/`) deployable to any static host or CDN (e.g. Fleek, Vercel, Netlify, IPFS gateways). Use `_redirects` (or host equivalent) so all routes serve `index.html` and BrowserRouter works; avoid hash-based routing unless the host cannot be configured.
 - **Optional: IPFS / decentralized** — Helia, Storacha, Pinata, Fleek SDK, or similar for content-addressed storage or deployment; add only if the product needs it.
 
 ---
@@ -157,7 +157,7 @@ This document is the **single source of truth** for the desired tech stack. Use 
 ## 16. Summary checklist (for scaffolding)
 
 - [ ] **Client-side only:** Static SPA, no app server, no SSR, no server API routes; static hosting + wallet auth
-- [ ] React 18 + TypeScript + Vite + React Router 6
+- [ ] React 18 + TypeScript + Vite + React Router 6 (BrowserRouter + `_redirects` for static host so history routing works)
 - [ ] Wagmi 2 + Viem 2 + RainbowKit 2
 - [ ] TanStack Query 5 + Devtools + Zustand
 - [ ] Tailwind + PostCSS (and Autoprefixer if needed)

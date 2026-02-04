@@ -1,6 +1,6 @@
 # DApp Tech Stack (canonical reference)
 
-This repo does **not** contain a DApp. It holds the **canonical tech stack description** so you can pass it to a **new project’s AI** (or use it yourself) when scaffolding a DApp. The AI uses it as the single source of truth and chooses current, compatible versions at project creation time.
+This repo does **not** contain a DApp. It holds the **canonical tech stack description** for **client-side only** decentralized applications: static frontend (SPA), no application server, wallet-based auth, deployment to static hosting. Pass [TECH-STACK.md](TECH-STACK.md) to a **new project’s AI** (or use it yourself) when scaffolding; the AI uses it as the single source of truth and chooses current, compatible versions at project creation time.
 
 ---
 

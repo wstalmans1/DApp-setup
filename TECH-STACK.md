@@ -4,14 +4,16 @@ This document is the **single source of truth** for the desired tech stack. Use 
 
 **Versioning:** Major version numbers below (e.g. "Wagmi 2", "React 18") describe the **compatible ecosystem** to target. When scaffolding, use the current stable minor/patch within that major. When a newer major is released and you want to adopt it (e.g. Wagmi 3, Vite 7), update this document once so it stays the source of truth. The doc is future-proof because you maintain intent here and resolve concrete versions at scaffold time; only the doc needs a deliberate edit when you move to a new major.
 
+**Application scope: client-side only.** This stack is for **client-side only** decentralized applications. The app is a **static frontend** (SPA) that runs in the browser and talks to blockchains (and optionally decentralized storage such as IPFS). Do **not** scaffold an application server, server-side API routes, server-side rendering (SSR), or server-held secrets. Deployment target is static hosting (e.g. Fleek, Vercel, Netlify, IPFS). Auth is wallet-based (RainbowKit/wagmi) only. Any “backend” is the chain and, if needed, external read-only or decentralized services.
+
 ---
 
 ## 1. Frontend framework & core
 
 - **React 18** — UI library.
 - **TypeScript** — Strict mode enabled; full type coverage. Target modern ES (e.g. ES2020+).
-- **Vite** — Build tool and dev server (use current stable major: 5 or 6).
-- **React Router DOM 6** — Client-side routing (BrowserRouter; consider hash-based routing if deploying to static hosts with SPA fallback).
+- **Vite** — Build tool and dev server (use current stable major: 5 or 6). Output is a **static SPA** (no SSR, no server runtime).
+- **React Router DOM 6** — Client-side routing only (BrowserRouter; consider hash-based routing if deploying to static hosts with SPA fallback).
 - **Module system**: ESM (`"type": "module"`). JSX: React JSX transform (`react-jsx`). Module resolution: bundler.
 
 ---
@@ -154,6 +156,7 @@ This document is the **single source of truth** for the desired tech stack. Use 
 
 ## 16. Summary checklist (for scaffolding)
 
+- [ ] **Client-side only:** Static SPA, no app server, no SSR, no server API routes; static hosting + wallet auth
 - [ ] React 18 + TypeScript + Vite + React Router 6
 - [ ] Wagmi 2 + Viem 2 + RainbowKit 2
 - [ ] TanStack Query 5 + Devtools + Zustand

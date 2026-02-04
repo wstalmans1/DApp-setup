@@ -146,7 +146,13 @@ This document is the **single source of truth** for the desired tech stack. Use 
 ## 15. Optional but recommended
 
 - **Connection health & reconnection** — WebSocket or polling for RPC health; automatic reconnection in Wagmi/viem config.
-- **Transaction UI** — Pending state and feedback (RainbowKit + Wagmi handle much of this).
+- **Overlay system (transaction treatment)** — Provide clear, in-app feedback for blockchain transactions via **overlays** (not only toasts). Recommended pieces:
+  - **Transaction overlay** — Full-screen or modal overlay with backdrop (e.g. semi-transparent + blur). Two states: **pending** (waiting for wallet signature; message like “Please confirm in your wallet”) and **confirming** (transaction submitted; “Processing on blockchain”). Use Wagmi: `useWriteContract` plus `useWaitForTransactionReceipt`; drive overlay visibility from `isPending` and `isConfirming`.
+  - **Success overlay** — After confirmation, show a success state (e.g. checkmark, short message, optional “View on explorer” link). User dismisses explicitly (e.g. Close button); then reset or close the flow.
+  - **Modal management** — Use Zustand (or similar) for a small modal store: which overlay/modal is open and optional payload. Render a single **ModalManager** (or overlay orchestrator) near the app root that renders the active overlay from that state.
+  - **UX rules** — Disable primary actions and prevent closing the modal/overlay while `isPending` or `isConfirming`. On error, show error message and allow retry without losing context. Optional: **wallet confirmation banner** (e.g. orange/amber strip) during pending to remind users to check a mobile wallet.
+  - **Structure** — e.g. `stores/modalStore.ts`, components such as `TransactionOverlay`, `SuccessOverlay`, and a root `ModalManager` that composes them. Tailwind for layout and styling (backdrop, blur, spinner, success icon). Prefer accessible markup (e.g. `role="dialog"`, `aria-labelledby`) where applicable.
+  - **Reference** — Full implementation guide and code snippets: [OVERLAY_QUICK_REFERENCE.md](https://github.com/wstalmans1/DamirOS_dapp_rainbowkit/blob/main/docs/OVERLAY_QUICK_REFERENCE.md) and [OVERLAY_SYSTEM_DOCUMENTATION.md](https://github.com/wstalmans1/DamirOS_dapp_rainbowkit/blob/main/docs/OVERLAY_SYSTEM_DOCUMENTATION.md).
 - **Mobile** — Prefer transport that works on mobile (e.g. HTTP fallback if WebSocket is flaky).
 - **Build versioning** — Inject a build id or version (e.g. git SHA, env var) for support and debugging.
 - **Static analysis** — Slither or similar for contracts (optional, run locally or in CI).
@@ -169,6 +175,7 @@ This document is the **single source of truth** for the desired tech stack. Use 
 - [ ] Vite manual chunks (vendor, wagmi, rainbowkit)
 - [ ] ESLint (flat) + Prettier + Husky + lint-staged
 - [ ] pnpm workspace; scripts for web, contracts, verify, anvil, check
+- [ ] Optional: Overlay system (transaction + success overlays, modal store, ModalManager, Wagmi integration)
 - [ ] Optional: Foundry, IPFS/Helia, React Refresh ESLint, buffer/process polyfills
 
 Use this document as the basis for generating a new project; choose current major/minor versions and exact package names at scaffold time.

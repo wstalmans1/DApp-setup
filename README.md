@@ -8,7 +8,7 @@ This repo does **not** contain a DApp. It holds the **canonical tech stack descr
 
 - **[TECH-STACK.md](TECH-STACK.md)** — The canonical stack: frontend (React, Vite, RainbowKit, wagmi, viem, etc.), contracts (Hardhat, OpenZeppelin, upgrades), verification (Sourcify then Blockscout), NatSpec, tooling, and checklist. **This is the file to hand to the new project’s AI.**
 - **Archive/Deprecated/** — Old setup scripts (`setup.sh`, `setup_with_factory_and_other_advanced_stuff.sh`). Not maintained for versioning; use at your own risk.
-- **backup/** — Older backups of setup scripts.
+- **Archive/backup/** — Older backups of setup scripts.
 - **Anvil-local-blockchain-base-for-blockscout/** — Guide for local Anvil + Blockscout (optional reference).
 
 ---

@@ -1,12 +1,12 @@
-# DApp Tech Stack (canonical reference)
+# DApp scaffolding spec (canonical reference)
 
-This repo does **not** contain a DApp. It holds the **canonical tech stack description** for **client-side only** decentralized applications: static frontend (SPA), no application server, wallet-based auth, deployment to static hosting. Pass [TECH-STACK.md](TECH-STACK.md) to a **new project’s AI** (or use it yourself) when scaffolding; the AI uses it as the single source of truth and chooses current, compatible versions at project creation time.
+This repo does **not** contain a DApp. It holds the **scaffolding spec** (stack, architecture, patterns) for **client-side only** decentralized applications: static frontend (SPA), no application server, wallet-based auth, deployment to static hosting. Pass [SCAFFOLDING-SPEC.md](SCAFFOLDING-SPEC.md) to a **new project’s AI** (or use it yourself) when scaffolding; the AI uses it as the single source of truth and chooses current, compatible versions at project creation time.
 
 ---
 
 ## What’s in this repo
 
-- **[TECH-STACK.md](TECH-STACK.md)** — The canonical stack: frontend (React, Vite, RainbowKit, wagmi, viem, etc.), contracts (Hardhat, OpenZeppelin, upgrades), verification (Sourcify then Blockscout), NatSpec, tooling, and checklist. **This is the file to hand to the new project’s AI.**
+- **[SCAFFOLDING-SPEC.md](SCAFFOLDING-SPEC.md)** — The scaffolding spec: tech stack (React, Vite, RainbowKit, wagmi, viem, Hardhat, OpenZeppelin, etc.), architecture (monorepo, overlays, real-time events), verification (Sourcify then Blockscout), and checklist. **This is the file to hand to the new project’s AI.**
 - **Archive/Deprecated/** — Old setup scripts (`setup.sh`, `setup_with_factory_and_other_advanced_stuff.sh`). Not maintained for versioning; use at your own risk.
 - **Archive/backup/** — Older backups of setup scripts.
 - **Anvil-local-blockchain-base-for-blockscout/** — Guide for local Anvil + Blockscout (optional reference).
@@ -16,8 +16,8 @@ This repo does **not** contain a DApp. It holds the **canonical tech stack descr
 ## How to use it
 
 1. **Start a new DApp project** (new repo or folder).
-2. **Give the new project’s AI the stack:** Point it at this repo’s **[TECH-STACK.md](TECH-STACK.md)** (or paste its contents). Example: *“Scaffold this project according to the tech stack in TECH-STACK.md; use current compatible versions.”*
+2. **Give the new project’s AI the spec:** Point it at this repo’s **[SCAFFOLDING-SPEC.md](SCAFFOLDING-SPEC.md)** (or paste its contents). Example: *“Scaffold this project according to SCAFFOLDING-SPEC.md; use current compatible versions.”*
 3. The AI (or you) scaffolds the new project from that spec: monorepo layout, dependencies, configs, scripts, env examples. No API keys for verification (Sourcify + Blockscout only).
 4. **In the new project:** Configure env (WalletConnect ID, RPC URLs, deployer key/mnemonic), run `pnpm web:dev`, `pnpm contracts:deploy`, etc. The new project’s own README can document those steps after scaffolding.
 
-This repo stays version-agnostic; only [TECH-STACK.md](TECH-STACK.md) is maintained as the source of truth. When you want to adopt a new major (e.g. Wagmi 3), update that file once.
+This repo stays version-agnostic; only [SCAFFOLDING-SPEC.md](SCAFFOLDING-SPEC.md) is maintained as the source of truth. When you want to adopt a new major (e.g. Wagmi 3), update that file once.

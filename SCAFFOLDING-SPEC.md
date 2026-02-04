@@ -1,10 +1,10 @@
-# Tech Stack — DApp (canonical description)
+# Scaffolding spec — DApp (stack, architecture, patterns)
 
-This document is the **single source of truth** for the desired tech stack. Use it when bootstrapping a new project (or hand it to an AI): implement the stack with **current, compatible versions** at the time of scaffolding. Do not pin exact versions in long-lived scaffolding scripts; resolve versions at project creation time.
+This document is the **single source of truth for scaffolding** a client-side DApp: **tech stack**, **architecture**, and **key UX/implementation patterns**. Use it when bootstrapping a new project (or hand it to an AI): implement with **current, compatible versions** at the time of scaffolding. Do not pin exact versions in long-lived scripts; resolve versions at project creation time.
 
 **Versioning:** Major version numbers below (e.g. "Wagmi 2", "React 18") describe the **compatible ecosystem** to target. When scaffolding, use the current stable minor/patch within that major. When a newer major is released and you want to adopt it (e.g. Wagmi 3, Vite 7), update this document once so it stays the source of truth. The doc is future-proof because you maintain intent here and resolve concrete versions at scaffold time; only the doc needs a deliberate edit when you move to a new major.
 
-**Application scope: client-side only.** This stack is for **client-side only** decentralized applications. The app is a **static frontend** (SPA) that runs in the browser and talks to blockchains (and optionally decentralized storage such as IPFS). Do **not** scaffold an application server, server-side API routes, server-side rendering (SSR), or server-held secrets. Deployment target is static hosting (e.g. Fleek, Vercel, Netlify, IPFS). Auth is wallet-based (RainbowKit/wagmi) only. Any “backend” is the chain and, if needed, external read-only or decentralized services.
+**Application scope: client-side only.** This spec is for **client-side only** decentralized applications. The app is a **static frontend** (SPA) that runs in the browser and talks to blockchains (and optionally decentralized storage such as IPFS). Do **not** scaffold an application server, server-side API routes, server-side rendering (SSR), or server-held secrets. Deployment target is static hosting (e.g. Fleek, Vercel, Netlify, IPFS). Auth is wallet-based (RainbowKit/wagmi) only. Any “backend” is the chain and, if needed, external read-only or decentralized services.
 
 ---
 
@@ -23,7 +23,7 @@ This document is the **single source of truth** for the desired tech stack. Use 
 - **Wagmi 2** — React hooks for Ethereum (use current 2.x).
 - **Viem 2** — TypeScript Ethereum library (use current 2.x).
 - **RainbowKit 2** — Wallet connection UI (use current 2.x).
-- **TanStack Query 5** — Data fetching and caching for chain/API data.
+- **TanStack Query 5** — Data fetching and caching for chain/API data. Use **stable query key scopes** (e.g. by chainId, entity type, id) so cache invalidation is targeted. After mutations or on chain events, **invalidate only the relevant queries** (not the whole cache) to avoid UI flicker; use `placeholderData` or keep previous data while refetching. When using a real-time event system (see §16), **event-driven invalidation** is essential: on contract events (e.g. `OrganizationDeployed`, `ConstitutionSigned`), invalidate the matching query scopes (e.g. org list, org count, single-org data) so the UI updates without full refetch.
 - **TanStack Query Devtools** — Dev tools (e.g. only in development).
 - **WalletConnect** — Multi-wallet connection protocol (RainbowKit uses it).
 - Wallet support: MetaMask, WalletConnect, Coinbase Wallet, and other WalletConnect-compatible wallets.
@@ -59,7 +59,8 @@ This document is the **single source of truth** for the desired tech stack. Use 
 - **hardhat-deploy** (optional) — Reproducible deployments, tags, and saved addresses.
 - **hardhat-gas-reporter** — Gas and optional USD estimates on test runs.
 - **hardhat-contract-sizer** — Bytecode size on compile (stay under 24KB limit).
-- **Networks**: Hardhat network (local, e.g. chainId 1337), Sepolia testnet, Ethereum mainnet; optionally Polygon, Optimism, Arbitrum. RPC via env (user-supplied URLs). Optional: Alchemy or other provider with WebSocket for real-time events.
+- **Networks**: Hardhat network (local, e.g. chainId 1337), Sepolia testnet, Ethereum mainnet; optionally Polygon, Optimism, Arbitrum. RPC via env (user-supplied URLs).
+- **RPC provider & transport** (recommended for production): Prefer a provider that supports **WebSocket** (e.g. Alchemy: `https://eth-{chain}.g.alchemy.com/v2/{API_KEY}` and `wss://eth-{chain}.g.alchemy.com/v2/{API_KEY}`). **Transport selection**: on **desktop** use WebSocket-only where possible to avoid `eth_getFilterChanges` HTTP polling; on **mobile** use HTTP transport (WebSocket can be flaky). Use **user-agent detection** (e.g. Android, iPhone, iPad, etc.) to choose transport. Optionally use a **separate WebSocket-only client** for event watching (see Real-Time Event System) so event watchers do not trigger HTTP fallback on the main Wagmi client. Env: e.g. `VITE_ALCHEMY_API_KEY`; build URLs from that. Public RPC endpoints can be used as fallbacks with Wagmi’s `fallback()` if desired.
 
 ---
 
@@ -145,22 +146,35 @@ This document is the **single source of truth** for the desired tech stack. Use 
 
 ## 15. Optional but recommended
 
-- **Connection health & reconnection** — WebSocket or polling for RPC health; automatic reconnection in Wagmi/viem config.
-- **Overlay system (transaction treatment)** — Provide clear, in-app feedback for blockchain transactions via **overlays** (not only toasts). Recommended pieces:
+- **Connection health & reconnection** — Implement **health checks** (e.g. periodic `getBlockNumber()`), track response time and **consecutive failures** (e.g. 3 failures = failed state). Define connection quality (e.g. excellent &lt; 500ms, good 500–1000ms, poor &gt; 1000ms or 2 failures, failed 3+). Use **exponential backoff** for reconnection (e.g. 1s → 30s max, cooldown between attempts). Expose state in a Zustand store and optionally show a connection indicator in the UI. On tab focus or online event, trigger recovery. Integrate with event watchers so they skip when unhealthy.
+- **Overlay system (transaction treatment)** — **Required for production-grade UX** (and for parity with reference DApps). Provide clear, in-app feedback for blockchain transactions via **overlays** (not only toasts). Include:
   - **Transaction overlay** — Full-screen or modal overlay with backdrop (e.g. semi-transparent + blur). Two states: **pending** (waiting for wallet signature; message like “Please confirm in your wallet”) and **confirming** (transaction submitted; “Processing on blockchain”). Use Wagmi: `useWriteContract` plus `useWaitForTransactionReceipt`; drive overlay visibility from `isPending` and `isConfirming`.
   - **Success overlay** — After confirmation, show a success state (e.g. checkmark, short message, optional “View on explorer” link). User dismisses explicitly (e.g. Close button); then reset or close the flow.
   - **Modal management** — Use Zustand (or similar) for a small modal store: which overlay/modal is open and optional payload. Render a single **ModalManager** (or overlay orchestrator) near the app root that renders the active overlay from that state.
   - **UX rules** — Disable primary actions and prevent closing the modal/overlay while `isPending` or `isConfirming`. On error, show error message and allow retry without losing context. Optional: **wallet confirmation banner** (e.g. orange/amber strip) during pending to remind users to check a mobile wallet.
   - **Structure** — e.g. `stores/modalStore.ts`, components such as `TransactionOverlay`, `SuccessOverlay`, and a root `ModalManager` that composes them. Tailwind for layout and styling (backdrop, blur, spinner, success icon). Prefer accessible markup (e.g. `role="dialog"`, `aria-labelledby`) where applicable.
   - **Reference** — Full implementation guide and code snippets: [OVERLAY_QUICK_REFERENCE.md](https://github.com/wstalmans1/DamirOS_dapp_rainbowkit/blob/main/docs/OVERLAY_QUICK_REFERENCE.md) and [OVERLAY_SYSTEM_DOCUMENTATION.md](https://github.com/wstalmans1/DamirOS_dapp_rainbowkit/blob/main/docs/OVERLAY_SYSTEM_DOCUMENTATION.md).
-- **Mobile** — Prefer transport that works on mobile (e.g. HTTP fallback if WebSocket is flaky).
-- **Build versioning** — Inject a build id or version (e.g. git SHA, env var) for support and debugging.
+- **Mobile** — Prefer transport that works on mobile (e.g. HTTP for RPC when WebSocket is flaky; see RPC transport in §5).
+- **Build versioning** — Inject a **build id** at build time (e.g. git SHA via `git rev-parse --short HEAD`, or a build counter file incremented on each build) using Vite `define` so it is available at runtime. Use for debugging, support, and error reports; optional: show in dev tools or footer.
 - **Static analysis** — Slither or similar for contracts (optional, run locally or in CI).
 - **CI** — GitHub Actions (or other) to run lint, build, and contract tests on push/PR; or document that checks run locally via Husky and `check:all`.
 
 ---
 
-## 16. Summary checklist (for scaffolding)
+## 16. Real-time event system (recommended for live UI)
+
+When the app must reflect chain state changes without user refresh (e.g. new organizations, signatures), implement a **real-time event system**:
+
+- **Separate WebSocket client** — Use a **WebSocket-only** viem/wagmi client for event watching (do not use the main Wagmi HTTP client for subscriptions), so event watchers do not trigger HTTP polling. Create it once (e.g. `realtime/wsClient.ts`) with `webSocket(WS_URL)`.
+- **Global event hook** — A single hook (e.g. `useGlobalOrgEvents`) mounted at app root that subscribes to contract events (e.g. `watchContractEvent`) for the relevant addresses. It should accept a list of addresses to watch, handle reconnection/resubscription, and integrate with connection health (skip or pause when unhealthy).
+- **Event-driven cache invalidation** — On each event, invalidate the **targeted** TanStack Query caches (e.g. org count, org list, single-org data) so the UI updates immediately. Use the same query key scopes as in §2; avoid broad invalidation to prevent flicker.
+- **Backfill** — Persist a **block cursor** (e.g. last processed block per chain in localStorage). When the app wakes up or reconnects, optionally backfill missed events from that block to current (e.g. `getLogs`) then resume live watching.
+- **Connection health** — When connection health is poor or failed, skip or pause event operations; re-subscribe when healthy again. Tie into the connection health store (see §15).
+- **Sharding** (optional) — For very large address lists, shard subscriptions (e.g. chunks of 200 addresses, limited concurrent shards) to avoid overload.
+
+---
+
+## 17. Summary checklist (for scaffolding)
 
 - [ ] **Client-side only:** Static SPA, no app server, no SSR, no server API routes; static hosting + wallet auth
 - [ ] React 18 + TypeScript + Vite + React Router 6 (BrowserRouter + `_redirects` for static host so history routing works)
@@ -175,7 +189,9 @@ This document is the **single source of truth** for the desired tech stack. Use 
 - [ ] Vite manual chunks (vendor, wagmi, rainbowkit)
 - [ ] ESLint (flat) + Prettier + Husky + lint-staged
 - [ ] pnpm workspace; scripts for web, contracts, verify, anvil, check
-- [ ] Optional: Overlay system (transaction + success overlays, modal store, ModalManager, Wagmi integration)
+- [ ] **Overlay system** (required for production UX): transaction + success overlays, modal store, ModalManager, Wagmi integration; see §15 and DamirOS overlay docs.
+- [ ] Optional: Real-time event system (WebSocket client, global event hook, cache invalidation, backfill); see §16.
+- [ ] Optional: RPC transport selection (WebSocket desktop, HTTP mobile), connection health store, build versioning (Vite define).
 - [ ] Optional: Foundry, IPFS/Helia, React Refresh ESLint, buffer/process polyfills
 
-Use this document as the basis for generating a new project; choose current major/minor versions and exact package names at scaffold time.
+Use this document as the basis for scaffolding a new project; choose current major/minor versions and exact package names at scaffold time.

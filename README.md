@@ -10,10 +10,11 @@ Use them to scaffold new client-side DApps (stack, architecture, patterns) and t
 
 ## What’s in this repo
 
-- **Pointer files** — [001_scaffolding_spec.md](001_scaffolding_spec.md) and [002_setup_instrctions_and_best_practices.md](002_setup_instrctions_and_best_practices.md) redirect to the canonical docs of the same names in **DamirOS_dapp_rainbowkit**. Do not treat this repo as the source of truth; use that project’s docs.
-- **Archive/Deprecated/** — Old setup scripts (`setup.sh`, `setup_with_factory_and_other_advanced_stuff.sh`). Not maintained; use at your own risk.
-- **Archive/backup/** — Older backups of setup scripts.
-- **Anvil-local-blockchain-base-for-blockscout/** — Guide for local Anvil + Blockscout (optional reference).
+- **dapp_setup_guides/** — [001_scaffolding_spec.md](dapp_setup_guides/001_scaffolding_spec.md), [002_setup_instrctions_and_best_practices.md](dapp_setup_guides/002_setup_instrctions_and_best_practices.md), and [003_bc_infrastructure_services.md](dapp_setup_guides/003_bc_infrastructure_services.md). The first two are pointer files to the canonical docs in **DamirOS_dapp_rainbowkit**; do not treat this repo as the source of truth.
+- **other/** — Miscellaneous reference material:
+  - **other/Archive/Deprecated/** — Old setup scripts (`setup.sh`, `setup_with_factory_and_other_advanced_stuff.sh`). Not maintained; use at your own risk.
+  - **other/Archive/backup/** — Older backups of setup scripts.
+  - **other/Anvil-local-blockchain-base-for-blockscout/** — Guide for local Anvil + Blockscout (optional reference).
 
 ---
 

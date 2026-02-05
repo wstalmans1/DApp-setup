@@ -1,13 +1,17 @@
-# DApp scaffolding spec (canonical reference)
+# DApp setup — pointer to canonical docs
 
-This repo does **not** contain a DApp. It holds the **scaffolding spec** (stack, architecture, patterns) for **client-side only** decentralized applications: static frontend (SPA), no application server, wallet-based auth, deployment to static hosting. Pass [SCAFFOLDING-SPEC.md](SCAFFOLDING-SPEC.md) to a **new project’s AI** (or use it yourself) when scaffolding; the AI uses it as the single source of truth and chooses current, compatible versions at project creation time.
+Both the **scaffolding spec** (what to build) and the **setup and implementation guide** (how to build) are centralized in one place:
+
+**[DamirOS_dapp_rainbowkit](https://github.com/wstalmans1/DamirOS_dapp_rainbowkit)** — that project’s documentation is the **single source of truth** for DApp scaffolding and implementation. The canonical docs are in **`docs/dapp_setup_guides/`**: [001_scaffolding_spec.md](https://github.com/wstalmans1/DamirOS_dapp_rainbowkit/blob/main/docs/dapp_setup_guides/001_scaffolding_spec.md) (what to build) and [002_setup_instrctions_and_best_practices.md](https://github.com/wstalmans1/DamirOS_dapp_rainbowkit/blob/main/docs/dapp_setup_guides/002_setup_instrctions_and_best_practices.md) (how to build).
+
+Use them to scaffold new client-side DApps (stack, architecture, patterns) and to follow step-by-step setup, code, overlay system, real-time events, connection health, verification (Sourcify + Blockscout), etc.
 
 ---
 
 ## What’s in this repo
 
-- **[SCAFFOLDING-SPEC.md](SCAFFOLDING-SPEC.md)** — The scaffolding spec: tech stack (React, Vite, RainbowKit, wagmi, viem, Hardhat, OpenZeppelin, etc.), architecture (monorepo, overlays, real-time events), verification (Sourcify then Blockscout), and checklist. **This is the file to hand to the new project’s AI.** It defines *what* to build (version-agnostic). For *how* to implement (step-by-step, code, best practices), use implementation guides such as the DamirOS project’s revised **Complete DApp Setup Guide** and the overlay docs linked from the spec.
-- **Archive/Deprecated/** — Old setup scripts (`setup.sh`, `setup_with_factory_and_other_advanced_stuff.sh`). Not maintained for versioning; use at your own risk.
+- **Pointer files** — [001_scaffolding_spec.md](001_scaffolding_spec.md) and [002_setup_instrctions_and_best_practices.md](002_setup_instrctions_and_best_practices.md) redirect to the canonical docs of the same names in **DamirOS_dapp_rainbowkit**. Do not treat this repo as the source of truth; use that project’s docs.
+- **Archive/Deprecated/** — Old setup scripts (`setup.sh`, `setup_with_factory_and_other_advanced_stuff.sh`). Not maintained; use at your own risk.
 - **Archive/backup/** — Older backups of setup scripts.
 - **Anvil-local-blockchain-base-for-blockscout/** — Guide for local Anvil + Blockscout (optional reference).
 
@@ -15,11 +19,8 @@ This repo does **not** contain a DApp. It holds the **scaffolding spec** (stack,
 
 ## How to use it
 
-1. **Start a new DApp project** (new repo or folder).
-2. **Give the new project’s AI the spec:** Point it at this repo’s **[SCAFFOLDING-SPEC.md](SCAFFOLDING-SPEC.md)** (or paste its contents). Example: *“Scaffold this project according to SCAFFOLDING-SPEC.md; use current compatible versions.”*
-3. The AI (or you) scaffolds the new project from that spec: monorepo layout, dependencies, configs, scripts, env examples. No API keys for verification (Sourcify + Blockscout only).
-4. **In the new project:** Configure env (WalletConnect ID, RPC URLs, deployer key/mnemonic), run `pnpm web:dev`, `pnpm contracts:deploy`, etc. The new project’s own README can document those steps after scaffolding.
+1. **Go to [DamirOS_dapp_rainbowkit](https://github.com/wstalmans1/DamirOS_dapp_rainbowkit)** for **`001_scaffolding_spec.md`** and **`002_setup_instrctions_and_best_practices.md`**.
+2. Use **`001_scaffolding_spec.md`** when bootstrapping a new project (or when handing the spec to an AI).
+3. Use **`002_setup_instrctions_and_best_practices.md`** for step-by-step instructions, code, and best practices after scaffolding.
 
-This repo stays version-agnostic; only [SCAFFOLDING-SPEC.md](SCAFFOLDING-SPEC.md) is maintained as the source of truth. When you want to adopt a new major (e.g. Wagmi 3), update that file once.
-
-**Spec vs implementation guides:** The spec defines *what* to scaffold (stack, architecture, patterns). The DamirOS **Complete DApp Setup Guide** (revised) is an *implementation guide*: setup steps, code snippets, Wagmi/TanStack config, scopes and debounced invalidation, real-time event system (WebSocket client, global event hook), transaction overlay system, connection health, Sourcify/Blockscout verification, `_redirects` for SPA routing, build versioning. Use it after scaffolding for concrete “how” and best practices. The spec already references the DamirOS overlay docs; a scaffolded project’s docs can reference the complete setup guide similarly.
+This repo does not hold the canonical spec or guide; it only points to DamirOS_dapp_rainbowkit.
